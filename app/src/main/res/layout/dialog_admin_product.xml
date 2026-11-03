@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/etTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/admin_input_bg"
+        android:hint="商品标题"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etKind"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="类型（如 physical / digital）"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etPrice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="价格（元）"
+        android:inputType="numberDecimal"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etStock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="库存（-1 不限）"
+        android:inputType="numberSigned"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etLimit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="每人限购（0 不限）"
+        android:inputType="number"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etSort"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="排序号（数字）"
+        android:inputType="number"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+</LinearLayout>

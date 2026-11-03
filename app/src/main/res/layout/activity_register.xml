@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="注册新账号"
+            android:textColor="@color/lx_text"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etUsername"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/auth_input_bg"
+            android:hint="用户名"
+            android:inputType="text"
+            android:textColor="@color/lx_text"
+            android:textColorHint="@color/lx_text_sub"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/etPassword"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/auth_input_bg"
+            android:hint="密码（至少 6 位）"
+            android:inputType="textPassword"
+            android:textColor="@color/lx_text"
+            android:textColorHint="@color/lx_text_sub"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/etPassword2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/auth_input_bg"
+            android:hint="确认密码"
+            android:inputType="textPassword"
+            android:textColor="@color/lx_text"
+            android:textColorHint="@color/lx_text_sub"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/etEmail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/auth_input_bg"
+            android:hint="邮箱"
+            android:inputType="textEmailAddress"
+            android:textColor="@color/lx_text"
+            android:textColorHint="@color/lx_text_sub"
+            android:textSize="15sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/auth_input_bg">
+
+                <com.lingxi.classic.util.SvgCaptchaView
+                    android:id="@+id/webCaptcha"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp" />
+            </FrameLayout>
+
+            <EditText
+                android:id="@+id/etCaptcha"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@drawable/auth_input_bg"
+                android:hint="图形验证码"
+                android:inputType="text"
+                android:textColor="@color/lx_text"
+                android:textColorHint="@color/lx_text_sub"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="点击图片可刷新验证码"
+            android:textColor="@color/lx_text_sub"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/etEmailCode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/auth_input_bg"
+                android:hint="邮箱验证码"
+                android:inputType="number"
+                android:textColor="@color/lx_text"
+                android:textColorHint="@color/lx_text_sub"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/btnSendCode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/bg_button_green"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="10dp"
+                android:text="发送验证码"
+                android:textColor="@color/white"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnRegister"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/bg_button_green"
+            android:gravity="center"
+            android:paddingVertical="12dp"
+            android:text="注 册"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvToLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:padding="6dp"
+            android:text="已有账号？去登录"
+            android:textColor="@color/lx_green_dark"
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>

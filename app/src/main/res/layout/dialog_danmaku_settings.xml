@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/lx_card"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="弹幕设置"
+        android:textColor="@color/lx_text"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="字号"
+        android:textColor="@color/lx_text_sub"
+        android:textSize="13sp" />
+
+    <SeekBar
+        android:id="@+id/seekTextScale"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="速度"
+        android:textColor="@color/lx_text_sub"
+        android:textSize="13sp" />
+
+    <SeekBar
+        android:id="@+id/seekSpeed"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="150" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="不透明度"
+        android:textColor="@color/lx_text_sub"
+        android:textSize="13sp" />
+
+    <SeekBar
+        android:id="@+id/seekAlpha"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="屏蔽词（逗号分隔）"
+        android:textColor="@color/lx_text_sub"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etBlockWords"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/comment_bg_input"
+        android:hint="例如：剧透,刷屏"
+        android:inputType="text"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/btnSave"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_button_green"
+        android:text="保存"
+        android:textColor="@color/white"
+        android:textSize="14sp" />
+</LinearLayout>

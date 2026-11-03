@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/etTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/admin_input_bg"
+        android:hint="广告标题"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etImage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="图片 URL"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etLink"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="链接 URL"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etPosition"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="位置（如 home_banner）"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etSort"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="排序号（数字）"
+        android:inputType="number"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+</LinearLayout>

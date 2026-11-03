@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LingXi" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/lx_green</item>
+        <item name="colorPrimaryDark">@color/lx_green_dark</item>
+        <item name="colorAccent">@color/lx_green</item>
+        <item name="android:windowBackground">@color/lx_bg</item>
+        <item name="android:statusBarColor">@color/lx_green_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

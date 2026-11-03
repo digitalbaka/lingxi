@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/etName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/admin_input_bg"
+        android:hint="节点名称"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/etUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="节点 URL（https://...）"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="节点类型"
+        android:textColor="@color/lx_text_sub"
+        android:textSize="12sp" />
+
+    <Spinner
+        android:id="@+id/spKind"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" />
+
+    <EditText
+        android:id="@+id/etNote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/admin_input_bg"
+        android:hint="备注（可选）"
+        android:singleLine="true"
+        android:textColor="@color/lx_text"
+        android:textColorHint="@color/lx_text_sub"
+        android:textSize="14sp" />
+
+    <CheckBox
+        android:id="@+id/cbEnabled"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:checked="true"
+        android:text="启用"
+        android:textColor="@color/lx_text"
+        android:textSize="14sp" />
+</LinearLayout>

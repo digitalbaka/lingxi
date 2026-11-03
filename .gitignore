@@ -1,0 +1,12 @@
+# 手机/模拟器系统镜像
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+*.iml
+.idea/
+.DS_Store
+.cxx/
+.externalNativeBuild/
+app/release/*.apk
+app/release/output-metadata.json

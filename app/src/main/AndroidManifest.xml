@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 老设备读取本地视频/图片用于投稿 -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <application
+        android:name=".LingXiApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.LingXi"
+        android:largeHeap="false"
+        tools:targetApi="33">
+
+        <activity
+            android:name=".ui.main.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ui.auth.LoginActivity"
+            android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.auth.RegisterActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.player.PlayerActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:launchMode="singleTop" />
+
+        <activity
+            android:name=".ui.article.ArticleActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity android:name=".ui.search.SearchActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity android:name=".ui.space.UserSpaceActivity" />
+
+        <activity android:name=".ui.list.VideoListActivity" />
+
+        <activity android:name=".ui.publish.PublishActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity android:name=".ui.message.MessageActivity" />
+        <activity android:name=".ui.message.ChatActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity android:name=".ui.admin.AdminActivity" />
+
+        <activity android:name=".ui.settings.SettingsActivity" />
+
+        <activity android:name=".ui.node.NodeSelectActivity" />
+    </application>
+</manifest>

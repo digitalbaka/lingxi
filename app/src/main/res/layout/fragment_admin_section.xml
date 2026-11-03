@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/lx_bg">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/entryList"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingVertical="6dp" />
+
+    <!-- 功能子页面容器（有子页时盖在入口列表上） -->
+    <FrameLayout
+        android:id="@+id/childContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/lx_bg" />
+</FrameLayout>
