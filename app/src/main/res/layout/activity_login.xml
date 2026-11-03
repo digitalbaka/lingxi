@@ -51,47 +51,6 @@
             android:textColorHint="@color/lx_text_sub"
             android:textSize="15sp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <FrameLayout
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="@drawable/auth_input_bg">
-
-                <com.lingxi.classic.util.SvgCaptchaView
-                    android:id="@+id/webCaptcha"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp" />
-            </FrameLayout>
-
-            <EditText
-                android:id="@+id/etCaptcha"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:background="@drawable/auth_input_bg"
-                android:hint="图形验证码"
-                android:inputType="text"
-                android:textColor="@color/lx_text"
-                android:textColorHint="@color/lx_text_sub"
-                android:textSize="15sp" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="点击图片可刷新验证码"
-            android:textColor="@color/lx_text_sub"
-            android:textSize="11sp" />
-
         <TextView
             android:id="@+id/btnLogin"
             android:layout_width="match_parent"
@@ -131,6 +90,48 @@
                 android:layout_marginTop="6dp"
                 android:textColor="@color/lx_text_sub"
                 android:textSize="13sp" />
+
+            <!-- 图形验证码：发邮箱验证码前需要 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/auth_input_bg">
+
+                    <com.lingxi.classic.util.SvgCaptchaView
+                        android:id="@+id/webCaptcha"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp" />
+                </FrameLayout>
+
+                <EditText
+                    android:id="@+id/etCaptcha"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="图形验证码"
+                    android:inputType="text"
+                    android:textColor="@color/lx_text"
+                    android:textColorHint="@color/lx_text_sub"
+                    android:textSize="15sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="点击图片可刷新验证码"
+                android:textColor="@color/lx_text_sub"
+                android:textSize="11sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"

@@ -3,6 +3,7 @@ package com.lingxi.classic.ui.auth
 import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.text.InputType
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.classic.data.api.ApiClient
@@ -32,8 +33,8 @@ class LoginActivity : AppCompatActivity() {
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 图形验证码属于二次验证步骤（发送邮箱验证码时服务端才要求），此处只挂刷新，不预加载
         binding.webCaptcha.setOnClickListener { loadCaptcha() }
-        loadCaptcha()
 
         binding.btnLogin.setOnClickListener { doLogin() }
         binding.btnSendCode.setOnClickListener { sendLoginCode() }
@@ -41,7 +42,11 @@ class LoginActivity : AppCompatActivity() {
 
         binding.tvUseRecovery.setOnClickListener {
             useRecovery = !useRecovery
+            binding.et2faCode.setText("")
             binding.et2faCode.hint = if (useRecovery) "恢复码" else "邮箱验证码"
+            // 恢复码为字母数字混合 → 文本键盘；邮箱验证码为纯数字 → 数字键盘
+            binding.et2faCode.inputType =
+                if (useRecovery) InputType.TYPE_CLASS_TEXT else InputType.TYPE_CLASS_NUMBER
             binding.tvUseRecovery.text = if (useRecovery) "返回使用邮箱验证码" else "无法接收邮件？使用恢复码"
             binding.btnSendCode.visible = !useRecovery
         }
@@ -82,6 +87,11 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    /** 仅在二次验证区展开时刷新验证码（登录第一步失败不白白消耗） */
+    private fun refreshCaptchaIfShown() {
+        if (binding.group2fa.visible) loadCaptcha()
+    }
+
     // ==================== 第一步：账号密码登录 ====================
 
     private fun doLogin() {
@@ -98,7 +108,7 @@ class LoginActivity : AppCompatActivity() {
                 when {
                     !resp.isSuccess || result == null -> {
                         toast(resp.message.ifBlank { "登录失败" })
-                        loadCaptcha()
+                        refreshCaptchaIfShown()
                     }
                     result.accessToken != null && result.user != null -> {
                         AuthManager.saveLogin(result.accessToken, result.user, result.refreshToken)
@@ -110,16 +120,17 @@ class LoginActivity : AppCompatActivity() {
                         binding.group2fa.visible = true
                         binding.tvEmailMasked.text = "验证码将发送至 ${result.emailMasked ?: "绑定邮箱"}"
                         binding.tvUseRecovery.visible = result.canUseRecovery
+                        loadCaptcha() // 进入二次验证步骤才拉取图形验证码
                         toast("该账号开启了两步验证，请完成邮箱验证")
                     }
                     else -> {
                         toast("登录失败：返回数据异常")
-                        loadCaptcha()
+                        refreshCaptchaIfShown()
                     }
                 }
             } catch (e: Exception) {
                 toast("网络错误：${e.message}")
-                loadCaptcha()
+                refreshCaptchaIfShown()
             } finally {
                 binding.btnLogin.isEnabled = true
             }

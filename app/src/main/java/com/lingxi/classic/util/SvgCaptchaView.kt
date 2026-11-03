@@ -340,6 +340,7 @@ class SvgCaptchaView @JvmOverloads constructor(
     private fun parseColor(s: String): Int? {
         val v = s.trim().lowercase()
         if (v == "none" || v == "transparent") return null
+        if (v.startsWith("hsl")) return parseHsl(v)
         return try {
             when {
                 v.startsWith("#") && v.length == 4 -> {
@@ -348,8 +349,9 @@ class SvgCaptchaView @JvmOverloads constructor(
                 }
                 v.startsWith("rgb") -> {
                     val nums = v.substringAfter('(').substringBefore(')')
-                        .split(',').mapNotNull { it.trim().toIntOrNull() }
-                    if (nums.size >= 3) Color.rgb(nums[0], nums[1], nums[2]) else null
+                        .split(Regex("[\\s,/]+")).filter { it.isNotBlank() }
+                        .mapNotNull { it.removeSuffix("%").toIntOrNull() }
+                    if (nums.size >= 3) Color.rgb(nums[0].coerceIn(0, 255), nums[1].coerceIn(0, 255), nums[2].coerceIn(0, 255)) else null
                 }
                 else -> Color.parseColor(v)
             }
@@ -361,6 +363,34 @@ class SvgCaptchaView @JvmOverloads constructor(
                 else -> null
             }
         }
+    }
+
+    /** 解析 hsl(h s% l%) / hsl(h, s%, l%) / hsla(...)（支持空格或逗号分隔、可选 /alpha） */
+    private fun parseHsl(v: String): Int? {
+        val inner = v.substringAfter('(').substringBefore(')')
+        val parts = inner.split(Regex("[\\s,/]+")).filter { it.isNotBlank() }
+        if (parts.size < 3) return null
+        val h = (parts[0].removeSuffix("deg").toFloatOrNull() ?: return null) / 360f
+        val sat = (parts[1].removeSuffix("%").toFloatOrNull() ?: return null) / 100f
+        val light = (parts[2].removeSuffix("%").toFloatOrNull() ?: return null) / 100f
+        val alpha = parts.getOrNull(3)?.removeSuffix("%")?.toFloatOrNull()?.let {
+            if (parts[3].endsWith("%")) it / 100f else it
+        } ?: 1f
+        val c = (1 - Math.abs(2 * light - 1)) * sat
+        val hp = ((h % 1f) + 1f) % 1f * 6f
+        val x = c * (1 - Math.abs(hp % 2 - 1))
+        val (r1, g1, b1) = when {
+            hp < 1 -> Triple(c, x, 0f); hp < 2 -> Triple(x, c, 0f)
+            hp < 3 -> Triple(0f, c, x); hp < 4 -> Triple(0f, x, c)
+            hp < 5 -> Triple(x, 0f, c); else -> Triple(c, 0f, x)
+        }
+        val m = light - c / 2
+        return Color.argb(
+            (alpha.coerceIn(0f, 1f) * 255).toInt(),
+            ((r1 + m).coerceIn(0f, 1f) * 255).toInt(),
+            ((g1 + m).coerceIn(0f, 1f) * 255).toInt(),
+            ((b1 + m).coerceIn(0f, 1f) * 255).toInt()
+        )
     }
 
     private fun withAlpha(color: Int, alpha: Float): Int {
