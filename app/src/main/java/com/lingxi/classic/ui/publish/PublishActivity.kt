@@ -50,7 +50,7 @@ class PublishActivity : AppCompatActivity() {
 
     private var currentKind = KIND_VIDEO
     private var pickedUri: Uri? = null
-    private var pickedBytes: ByteArray? = null
+    private var pickedSize: Long = 0
     private var pickedName = ""
     private var mediaDurationSec = 0L
     private var mediaWidth = 0
@@ -62,8 +62,8 @@ class PublishActivity : AppCompatActivity() {
     private var partitions: List<Partition> = emptyList()
     private var selectedPartition = ""
 
-    /** 大文件直接读进内存：上限 150MB */
-    private val maxMediaBytes = 150L * 1024 * 1024
+    /** 流式上传，不读入内存：上限 5GB（与站点大文件上传能力一致） */
+    private val maxMediaBytes = 5L * 1024 * 1024 * 1024
 
     private val uploadClient by lazy {
         OkHttpClient.Builder()
@@ -127,9 +127,9 @@ class PublishActivity : AppCompatActivity() {
         binding.etContent.visible = isArticle
         // 换类型后之前的文件与上传结果不再适用
         pickedUri = null
-        pickedBytes = null
+        pickedSize = 0
         uploadedUrl = null
-        binding.tvFileInfo.text = "未选择（≤150MB）"
+        binding.tvFileInfo.text = "未选择（≤5GB）"
         binding.groupUpload.visible = false
     }
 
@@ -164,25 +164,40 @@ class PublishActivity : AppCompatActivity() {
     // ==================== 媒体文件选择 ====================
 
     private fun onMediaPicked(uri: Uri) {
-        binding.tvFileInfo.text = "读取文件中…"
+        binding.tvFileInfo.text = "读取文件信息中…"
         lifecycleScope.launch {
-            val bytes = withContext(Dispatchers.IO) { readUriBytes(uri, maxMediaBytes) }
-            if (bytes == null) {
-                binding.tvFileInfo.text = "未选择（≤150MB）"
-                toastLong("文件过大或读取失败（最大支持 150MB）")
+            val size = withContext(Dispatchers.IO) { queryFileSize(uri) }
+            if (size < 0) {
+                binding.tvFileInfo.text = "未选择（≤5GB）"
+                toastLong("无法读取文件")
+                return@launch
+            }
+            if (size > maxMediaBytes) {
+                binding.tvFileInfo.text = "未选择（≤5GB）"
+                toastLong("文件过大（最大支持 5GB）")
                 return@launch
             }
             pickedUri = uri
-            pickedBytes = bytes
+            pickedSize = size
             pickedName = queryDisplayName(uri) ?: if (currentKind == KIND_AUDIO) "audio.mp3" else "video.mp4"
             extractMediaMeta(uri)
             uploadedUrl = null
             binding.groupUpload.visible = true
             binding.progressUpload.progress = 0
             binding.tvProgress.text = "0%"
-            binding.tvFileInfo.text = "$pickedName（${FormatUtils.formatBytes(bytes.size.toLong())}" +
+            binding.tvFileInfo.text = "$pickedName（${FormatUtils.formatBytes(size)}" +
                 (if (mediaDurationSec > 0) "，${FormatUtils.formatDuration(mediaDurationSec)}" else "") + "）"
         }
+    }
+
+    /** 查询文件大小；未知时返回 0（按未知长度流式上传），失败返回 -1 */
+    private fun queryFileSize(uri: Uri): Long {
+        return try {
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(OpenableColumns.SIZE)
+                if (idx >= 0 && c.moveToFirst()) c.getLong(idx) else 0L
+            } ?: 0L
+        } catch (e: Exception) { -1L }
     }
 
     private fun readUriBytes(uri: Uri, maxBytes: Long): ByteArray? {
@@ -225,14 +240,14 @@ class PublishActivity : AppCompatActivity() {
     // ==================== 上传（带进度） ====================
 
     private fun startUpload() {
-        val bytes = pickedBytes
-        if (bytes == null) { toast("请先选择文件"); return }
+        val uri = pickedUri
+        if (uri == null) { toast("请先选择文件"); return }
         val scope = if (currentKind == KIND_AUDIO) "audio" else "videos"
 
         binding.btnUpload.isEnabled = false
         lifecycleScope.launch {
             try {
-                val result = uploadBytes(scope, pickedName, bytes) { written, total ->
+                val result = uploadBytes(scope, pickedName, UriRequestBody(uri, pickedSize)) { written, total ->
                     runOnUiThread {
                         val percent = if (total > 0) (written * 100 / total).toInt() else 0
                         binding.progressUpload.progress = percent
@@ -263,11 +278,10 @@ class PublishActivity : AppCompatActivity() {
     private suspend fun uploadBytes(
         scope: String,
         fileName: String,
-        bytes: ByteArray,
+        body: RequestBody,
         onProgress: ((written: Long, total: Long) -> Unit)? = null
     ): ApiResponse<UploadResult>? {
-        val fileBody = bytes.toRequestBody("application/octet-stream".toMediaType())
-        val requestBody = if (onProgress != null) CountingRequestBody(fileBody, onProgress) else fileBody
+        val requestBody = if (onProgress != null) CountingRequestBody(body, onProgress) else body
         val part = MultipartBody.Part.createFormData("file", fileName, requestBody)
         val multipart = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -308,7 +322,7 @@ class PublishActivity : AppCompatActivity() {
                 }
                 val name = queryDisplayName(uri) ?: "cover.jpg"
                 // 封面同样走节点感知上传通道（切换直连节点时直连节点）
-                val resp = uploadBytes("covers", name, bytes)
+                val resp = uploadBytes("covers", name, bytes.toRequestBody("application/octet-stream".toMediaType()))
                 val url = resp?.data?.url
                 if (resp != null && resp.isSuccess && !url.isNullOrEmpty()) {
                     coverUrl = url
@@ -396,6 +410,33 @@ class PublishActivity : AppCompatActivity() {
                 if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
             }
         } catch (e: Exception) { null }
+    }
+
+    /** 从 Uri 流式读取的请求体：不把文件加载进内存，支持超大文件 */
+    private inner class UriRequestBody(
+        private val uri: Uri,
+        private val length: Long
+    ) : RequestBody() {
+
+        override fun contentType() = "application/octet-stream".toMediaType()
+
+        override fun contentLength(): Long = if (length > 0) length else -1L
+
+        override fun writeTo(sink: BufferedSink) {
+            val input = contentResolver.openInputStream(uri)
+                ?: throw java.io.IOException("无法打开所选文件")
+            input.use {
+                val buf = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val n = it.read(buf)
+                    if (n <= 0) break
+                    total += n
+                    if (total > maxMediaBytes) throw java.io.IOException("文件超过 5GB 上限")
+                    sink.write(buf, 0, n)
+                }
+            }
+        }
     }
 
     /** 包装 RequestBody，上报写入进度 */

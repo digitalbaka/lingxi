@@ -106,7 +106,7 @@
                         android:layout_weight="1"
                         android:ellipsize="end"
                         android:maxLines="2"
-                        android:text="未选择（≤150MB）"
+                        android:text="未选择（≤5GB）"
                         android:textColor="@color/lx_text_sub"
                         android:textSize="13sp" />
                 </LinearLayout>

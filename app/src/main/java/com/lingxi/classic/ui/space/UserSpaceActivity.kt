@@ -92,7 +92,7 @@ class UserSpaceActivity : AppCompatActivity() {
                 val user = info.user
                 binding.tvNickname.text = user?.nickname?.ifBlank { user.username } ?: "用户 $uid"
                 binding.tvLevel.text = "LV ${info.level?.level ?: user?.level ?: 0}"
-                binding.tvJoined.text = if (info.joinedAt.isNotEmpty()) "加入时间：${info.joinedAt}" else ""
+                binding.tvJoined.text = if (info.joinedAt.isNotEmpty()) "加入时间：${FormatUtils.formatDateString(info.joinedAt)}" else ""
                 ImageLoader.load(binding.ivAvatar, user?.getFullAvatarUrl(ApiClient.BASE_URL), circle = true)
 
                 binding.tvFollowingCount.text = FormatUtils.formatCount((user?.followingCount ?: 0).toLong())
@@ -184,12 +184,15 @@ class UserSpaceActivity : AppCompatActivity() {
     }
 
     private suspend fun loadVideos(append: Boolean) {
-        val resp = ApiClient.apiService.getUserVideos(uid, page = page)
+        // 文章走通用列表接口（/users/{id}/videos 只返回视频，不含文章）
+        val resp = if (currentTab == TAB_ARTICLE)
+            ApiClient.apiService.getVideos(page = page, kind = "article", uid = uid)
+        else
+            ApiClient.apiService.getUserVideos(uid, page = page)
         val data = resp.data
         if (!resp.isSuccess || data == null) { toast(resp.message.ifBlank { "加载失败" }); return }
-        val list = if (currentTab == TAB_ARTICLE) data.items.filter { it.kind == "article" } else data.items
         val adapter = if (currentTab == TAB_ARTICLE) articleAdapter else videoAdapter
-        if (append) adapter.append(list) else adapter.submit(list)
+        if (append) adapter.append(data.items) else adapter.submit(data.items)
         hasMore = data.hasMore
         loadMoreListener.hasMore = hasMore
         if (hasMore) page++

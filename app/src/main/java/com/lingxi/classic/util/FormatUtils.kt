@@ -43,6 +43,13 @@ object FormatUtils {
         }
     }
 
+    /** 服务端可能返回毫秒/秒时间戳或已格式化字符串，统一成 yyyy-MM-dd */
+    fun formatDateString(raw: String): String {
+        val ts = raw.trim().toLongOrNull() ?: return raw
+        val ms = if (raw.trim().length <= 10) ts * 1000 else ts
+        return formatDate(ms)
+    }
+
     fun formatBytes(bytes: Long): String = when {
         bytes >= 1L shl 30 -> String.format(Locale.getDefault(), "%.1f GB", bytes / (1024.0 * 1024 * 1024))
         bytes >= 1L shl 20 -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024))
