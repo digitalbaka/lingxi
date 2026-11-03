@@ -7,10 +7,12 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -44,6 +46,7 @@ import com.lingxi.classic.ui.common.InteractionBar
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
+import com.lingxi.classic.util.isTablet
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
 import com.lingxi.classic.util.visible
@@ -71,6 +74,8 @@ class PlayerActivity : AppCompatActivity() {
     private var following = false
     private var descExpanded = false
     private var isFullscreen = false
+    /** 平板上全屏只是布局状态，不绑定横竖屏（平板横屏打开视频不应被强制全屏） */
+    private var tabletFullscreen = false
 
     private var viewReported = false
     private var viewReportJob: Job? = null
@@ -510,10 +515,16 @@ class PlayerActivity : AppCompatActivity() {
     // ==================== 全屏 ====================
 
     private fun toggleFullscreen() {
-        requestedOrientation = if (isFullscreen)
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        else
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        if (isTablet()) {
+            // 平板：不转屏，仅切换播放器铺满窗口/恢复 16:9 嵌入两种布局
+            tabletFullscreen = !tabletFullscreen
+            applyOrientationLayout(resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        } else {
+            requestedOrientation = if (isFullscreen)
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            else
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -522,18 +533,38 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun applyOrientationLayout(landscape: Boolean) {
-        isFullscreen = landscape
-        val lp = binding.playerContainer.layoutParams
-        lp.height = if (landscape) ViewGroup.LayoutParams.MATCH_PARENT
-        else resources.displayMetrics.widthPixels * 9 / 16
+        val fullscreen = if (isTablet()) tabletFullscreen else landscape
+        isFullscreen = fullscreen
+        val dm = resources.displayMetrics
+        val lp = binding.playerContainer.layoutParams as LinearLayout.LayoutParams
+        if (fullscreen) {
+            lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            lp.gravity = Gravity.NO_GRAVITY
+        } else {
+            var w = ViewGroup.LayoutParams.MATCH_PARENT
+            var h = dm.widthPixels * 9 / 16
+            if (isTablet()) {
+                // 平板横屏下 16:9 全宽会占满甚至超出屏幕高度，按 3/4 屏高约束并水平居中
+                val maxH = dm.heightPixels * 3 / 4
+                if (h > maxH) {
+                    h = maxH
+                    w = maxH * 16 / 9
+                }
+            }
+            lp.width = w
+            lp.height = h
+            lp.gravity = if (w == ViewGroup.LayoutParams.MATCH_PARENT)
+                Gravity.NO_GRAVITY else Gravity.CENTER_HORIZONTAL
+        }
         binding.playerContainer.layoutParams = lp
-        binding.danmakuBar.visible = !landscape
-        binding.scrollView.visible = !landscape
-        binding.btnFullscreen.text = if (landscape) "退出" else "全屏"
+        binding.danmakuBar.visible = !fullscreen
+        binding.scrollView.visible = !fullscreen
+        binding.btnFullscreen.text = if (fullscreen) "退出" else "全屏"
         // 全屏时在顶栏提供清晰度切换入口（竖屏入口在简介区）
-        binding.btnQualityFs.visible = landscape && (video?.qualityOptions?.size ?: 0) > 1
+        binding.btnQualityFs.visible = fullscreen && (video?.qualityOptions?.size ?: 0) > 1
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            if (landscape) hide(WindowInsetsCompat.Type.systemBars())
+            if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())
             else show(WindowInsetsCompat.Type.systemBars())
         }
     }

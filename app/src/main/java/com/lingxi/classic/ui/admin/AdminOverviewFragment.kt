@@ -15,6 +15,7 @@ import com.lingxi.classic.data.model.displayName
 import com.lingxi.classic.databinding.FragmentAdminOverviewBinding
 import com.lingxi.classic.databinding.ItemAdminStatBinding
 import com.lingxi.classic.util.FormatUtils
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
 import kotlinx.coroutines.launch
@@ -33,7 +34,7 @@ class AdminOverviewFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        binding.statsGrid.layoutManager = GridLayoutManager(requireContext(), 2)
+        binding.statsGrid.layoutManager = GridLayoutManager(requireContext(), requireContext().gridSpanCount())
         binding.statsGrid.adapter = statsAdapter
         binding.swipe.setOnRefreshListener { load() }
         load()

@@ -1,6 +1,7 @@
 package com.lingxi.classic.ui.main
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -29,6 +30,7 @@ import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
 import com.lingxi.classic.util.visible
@@ -62,7 +64,7 @@ class DynamicsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         videoAdapter = VideoAdapter(onClick = { Navigator.openVideo(requireContext(), it) })
         dynamicAdapter = DynamicAdapter()
-        gridLm = GridLayoutManager(requireContext(), 2)
+        gridLm = GridLayoutManager(requireContext(), requireContext().gridSpanCount())
         linearLm = LinearLayoutManager(requireContext())
 
         loadMoreListener = LoadMoreListener { loadNext() }
@@ -89,6 +91,14 @@ class DynamicsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    /** MainActivity 声明了 configChanges，旋转不重建，这里手动刷新列数 */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::gridLm.isInitialized) {
+            gridLm.spanCount = requireContext().gridSpanCount()
+        }
     }
 
     private fun applyLoginState() {

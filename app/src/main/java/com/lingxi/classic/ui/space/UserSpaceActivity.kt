@@ -20,6 +20,7 @@ import com.lingxi.classic.ui.common.LoadMoreListener
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
 import com.lingxi.classic.util.FormatUtils
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.visible
@@ -58,7 +59,7 @@ class UserSpaceActivity : AppCompatActivity() {
         uid = intent.getLongExtra(Navigator.EXTRA_UID, 0)
         if (uid <= 0) { toast("参数错误"); finish(); return }
 
-        val grid = GridLayoutManager(this, 2)
+        val grid = GridLayoutManager(this, gridSpanCount())
         binding.recyclerView.layoutManager = grid
         binding.recyclerView.adapter = videoAdapter
         loadMoreListener = LoadMoreListener { loadTabContent(append = true) }
@@ -149,7 +150,7 @@ class UserSpaceActivity : AppCompatActivity() {
         binding.tabDynamic.setTypeface(null, if (tab == TAB_DYNAMIC) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
 
         binding.recyclerView.layoutManager = if (tab == TAB_DYNAMIC)
-            LinearLayoutManager(this) else GridLayoutManager(this, 2)
+            LinearLayoutManager(this) else GridLayoutManager(this, gridSpanCount())
         binding.recyclerView.adapter = when (tab) {
             TAB_ARTICLE -> articleAdapter
             TAB_DYNAMIC -> dynamicAdapter

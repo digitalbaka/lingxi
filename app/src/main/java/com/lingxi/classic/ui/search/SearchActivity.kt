@@ -24,6 +24,7 @@ import com.lingxi.classic.ui.common.LoadMoreListener
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
 import com.lingxi.classic.util.FormatUtils
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
@@ -59,7 +60,7 @@ class SearchActivity : AppCompatActivity() {
 
         videoAdapter = VideoAdapter(onClick = { Navigator.openVideo(this, it) })
         userAdapter = UserAdapter()
-        gridLm = GridLayoutManager(this, 2)
+        gridLm = GridLayoutManager(this, gridSpanCount())
         linearLm = LinearLayoutManager(this)
         binding.rvResults.layoutManager = gridLm
         binding.rvResults.adapter = videoAdapter

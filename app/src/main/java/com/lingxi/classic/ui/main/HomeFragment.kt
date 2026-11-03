@@ -1,6 +1,7 @@
 package com.lingxi.classic.ui.main
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -19,6 +20,7 @@ import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
 import com.lingxi.classic.util.BannerView
 import com.lingxi.classic.util.dp
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
 import com.lingxi.classic.util.visible
@@ -32,6 +34,7 @@ class HomeFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var adapter: VideoAdapter
+    private lateinit var gridLayoutManager: GridLayoutManager
     private lateinit var loadMoreListener: LoadMoreListener
     private var bannerView: BannerView? = null
 
@@ -46,11 +49,12 @@ class HomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         adapter = VideoAdapter(onClick = { Navigator.openVideo(requireContext(), it) })
-        val glm = GridLayoutManager(requireContext(), 2)
-        glm.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-            override fun getSpanSize(position: Int): Int = if (adapter.isHeaderPosition(position)) 2 else 1
+        gridLayoutManager = GridLayoutManager(requireContext(), requireContext().gridSpanCount())
+        gridLayoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int =
+                if (adapter.isHeaderPosition(position)) gridLayoutManager.spanCount else 1
         }
-        binding.recyclerView.layoutManager = glm
+        binding.recyclerView.layoutManager = gridLayoutManager
         // Banner 作为列表全宽头部，有数据时才显示
         adapter.setHeader { parent ->
             BannerView(parent.context).apply {
@@ -78,6 +82,14 @@ class HomeFragment : Fragment() {
         super.onDestroyView()
         bannerView = null
         _binding = null
+    }
+
+    /** MainActivity 声明了 configChanges，旋转不重建，这里手动刷新列数 */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::gridLayoutManager.isInitialized) {
+            gridLayoutManager.spanCount = requireContext().gridSpanCount()
+        }
     }
 
     /** 首屏/刷新：轮播、置顶与推荐并行请求 */

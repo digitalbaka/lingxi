@@ -24,6 +24,12 @@ fun View.invisible() { visibility = View.INVISIBLE }
 fun Int.dp(context: Context): Int =
     (this * context.resources.displayMetrics.density).toInt()
 
+/** 视频网格列数：随屏幕宽度/横竖屏由 res/values* 的 grid_span_count 决定，旋转时读取自动取新值 */
+fun Context.gridSpanCount(): Int = resources.getInteger(com.lingxi.classic.R.integer.grid_span_count)
+
+/** sw600dp 及以上视为平板（7 寸+），用于播放器横屏不强制全屏等大尺寸交互差异 */
+fun Context.isTablet(): Boolean = resources.configuration.smallestScreenWidthDp >= 600
+
 /** API 返回体统一处理：code!=0 时吐 message 并返回 null */
 fun <T> com.lingxi.classic.data.model.ApiResponse<T>.unwrap(context: Context? = null): T? {
     if (isSuccess) return data

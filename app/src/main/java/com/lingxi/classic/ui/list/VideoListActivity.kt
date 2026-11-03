@@ -24,6 +24,7 @@ import com.lingxi.classic.ui.common.LoadMoreListener
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
 import com.lingxi.classic.util.FormatUtils
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
@@ -118,7 +119,7 @@ class VideoListActivity : AppCompatActivity() {
             }
             "my_videos" -> {
                 myVideoAdapter = MyVideoAdapter()
-                binding.rvList.layoutManager = GridLayoutManager(this, 2)
+                binding.rvList.layoutManager = GridLayoutManager(this, gridSpanCount())
                 binding.rvList.adapter = myVideoAdapter
             }
             else -> { // folder
@@ -126,7 +127,7 @@ class VideoListActivity : AppCompatActivity() {
                     onClick = { Navigator.openVideo(this, it) },
                     onLongClick = { confirmUnfavorite(it) }
                 )
-                binding.rvList.layoutManager = GridLayoutManager(this, 2)
+                binding.rvList.layoutManager = GridLayoutManager(this, gridSpanCount())
                 binding.rvList.adapter = videoAdapter
             }
         }
@@ -227,7 +228,7 @@ class VideoListActivity : AppCompatActivity() {
                 onLongClick = { confirmUnfavorite(it) }
             )
         }
-        binding.rvList.layoutManager = GridLayoutManager(this, 2)
+        binding.rvList.layoutManager = GridLayoutManager(this, gridSpanCount())
         binding.rvList.adapter = videoAdapter
         loadMoreListener.reset()
         loadInternal()

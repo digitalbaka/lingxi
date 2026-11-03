@@ -1,5 +1,6 @@
 package com.lingxi.classic.ui.main
 
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -17,6 +18,7 @@ import com.lingxi.classic.databinding.FragmentPartitionBinding
 import com.lingxi.classic.ui.common.LoadMoreListener
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
+import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
 import com.lingxi.classic.util.visible
@@ -32,6 +34,7 @@ class PartitionFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var adapter: VideoAdapter
+    private lateinit var gridLayoutManager: GridLayoutManager
     private lateinit var loadMoreListener: LoadMoreListener
 
     private val partitions = mutableListOf<Partition>()
@@ -50,7 +53,8 @@ class PartitionFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         adapter = VideoAdapter(onClick = { Navigator.openVideo(requireContext(), it) })
-        binding.rvVideos.layoutManager = GridLayoutManager(requireContext(), 2)
+        gridLayoutManager = GridLayoutManager(requireContext(), requireContext().gridSpanCount())
+        binding.rvVideos.layoutManager = gridLayoutManager
         binding.rvVideos.adapter = adapter
 
         loadMoreListener = LoadMoreListener { loadNext() }
@@ -72,6 +76,14 @@ class PartitionFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    /** MainActivity 声明了 configChanges，旋转不重建，这里手动刷新列数 */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::gridLayoutManager.isInitialized) {
+            gridLayoutManager.spanCount = requireContext().gridSpanCount()
+        }
     }
 
     // ==================== 分区栏 ====================
