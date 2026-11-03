@@ -16,9 +16,16 @@ object ImageLoader {
 
     fun load(iv: ImageView, url: String?, circle: Boolean = false) {
         if (iv.context == null) return
+        if (url.isNullOrEmpty()) {
+            // 无图：直接显示内置默认图，避免灰底占位造成"加载失败"观感
+            Glide.with(iv).clear(iv)
+            iv.setImageResource(if (circle) R.drawable.ic_default_avatar else R.drawable.ic_default_cover)
+            return
+        }
         var req = Glide.with(iv).load(url).apply(OPTS)
-        if (circle) req = req.circleCrop()
-        else req = req.placeholder(R.drawable.bg_cover_placeholder)
+        req = if (circle) req.circleCrop().placeholder(R.drawable.ic_default_avatar)
+            .error(R.drawable.ic_default_avatar)
+        else req.placeholder(R.drawable.ic_default_cover).error(R.drawable.ic_default_cover)
         req.into(iv)
     }
 

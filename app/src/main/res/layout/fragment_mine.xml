@@ -145,16 +145,14 @@
                 android:gravity="center_horizontal"
                 android:orientation="vertical">
 
-                <TextView
+                <ImageView
                     android:id="@+id/tvCheckinIcon"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
                     android:background="@drawable/mine_circle"
-                    android:gravity="center"
-                    android:text="签"
-                    android:textColor="@color/lx_green_dark"
-                    android:textSize="17sp"
-                    android:textStyle="bold" />
+                    android:padding="10dp"
+                    android:src="@drawable/ic_menu_checkin"
+                    android:tint="@color/lx_green_dark" />
 
                 <TextView
                     android:id="@+id/tvCheckinLabel"
@@ -174,15 +172,13 @@
                 android:gravity="center_horizontal"
                 android:orientation="vertical">
 
-                <TextView
+                <ImageView
                     android:layout_width="44dp"
                     android:layout_height="44dp"
                     android:background="@drawable/mine_circle"
-                    android:gravity="center"
-                    android:text="鱼"
-                    android:textColor="@color/lx_green_dark"
-                    android:textSize="17sp"
-                    android:textStyle="bold" />
+                    android:padding="10dp"
+                    android:src="@drawable/ic_menu_fish"
+                    android:tint="@color/lx_green_dark" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -201,15 +197,13 @@
                 android:gravity="center_horizontal"
                 android:orientation="vertical">
 
-                <TextView
+                <ImageView
                     android:layout_width="44dp"
                     android:layout_height="44dp"
                     android:background="@drawable/mine_circle"
-                    android:gravity="center"
-                    android:text="会"
-                    android:textColor="@color/lx_green_dark"
-                    android:textSize="17sp"
-                    android:textStyle="bold" />
+                    android:padding="10dp"
+                    android:src="@drawable/ic_menu_vip"
+                    android:tint="@color/lx_green_dark" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -232,15 +226,13 @@
                     android:layout_width="44dp"
                     android:layout_height="44dp">
 
-                    <TextView
+                    <ImageView
                         android:layout_width="44dp"
                         android:layout_height="44dp"
                         android:background="@drawable/mine_circle"
-                        android:gravity="center"
-                        android:text="信"
-                        android:textColor="@color/lx_green_dark"
-                        android:textSize="17sp"
-                        android:textStyle="bold" />
+                        android:padding="10dp"
+                        android:src="@drawable/ic_menu_message"
+                        android:tint="@color/lx_green_dark" />
 
                     <TextView
                         android:id="@+id/tvMsgBadge"

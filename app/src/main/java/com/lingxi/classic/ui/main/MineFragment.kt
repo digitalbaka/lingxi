@@ -312,7 +312,7 @@ class MineFragment : Fragment() {
     // ==================== 菜单 ====================
 
     private data class MenuItem(
-        val icon: String,
+        @androidx.annotation.DrawableRes val iconRes: Int,
         val title: String,
         val subtitle: () -> String = { "" },
         val needLogin: Boolean = true,
@@ -326,22 +326,22 @@ class MineFragment : Fragment() {
         container.removeAllViews()
 
         val items = listOf(
-            MenuItem("稿", "我的投稿") { openVideoList("my_videos") },
-            MenuItem("史", "历史记录") { openVideoList("history") },
-            MenuItem("藏", "我的收藏") { openVideoList("favorites") },
-            MenuItem("料", "个人资料编辑") { showProfileEditDialog() },
-            MenuItem("密", "修改密码") { showChangePasswordDialog() },
-            MenuItem("点", "节点选择", needLogin = false,
+            MenuItem(R.drawable.ic_menu_upload, "我的投稿") { openVideoList("my_videos") },
+            MenuItem(R.drawable.ic_menu_history, "历史记录") { openVideoList("history") },
+            MenuItem(R.drawable.ic_menu_favorite, "我的收藏") { openVideoList("favorites") },
+            MenuItem(R.drawable.ic_menu_profile, "个人资料编辑") { showProfileEditDialog() },
+            MenuItem(R.drawable.ic_menu_password, "修改密码") { showChangePasswordDialog() },
+            MenuItem(R.drawable.ic_menu_node, "节点选择", needLogin = false,
                 subtitle = { AuthManager.nodeName ?: "主站" }) {
                 startActivity(Intent(ctx, NodeSelectActivity::class.java))
             },
-            MenuItem("设", "设置", needLogin = false) {
+            MenuItem(R.drawable.ic_menu_settings, "设置", needLogin = false) {
                 startActivity(Intent(ctx, SettingsActivity::class.java))
             },
-            MenuItem("管", "管理后台", adminOnly = true) {
+            MenuItem(R.drawable.ic_menu_admin, "管理后台", adminOnly = true) {
                 startActivity(Intent().setClassName(ctx.packageName, "com.lingxi.classic.ui.admin.AdminActivity"))
             },
-            MenuItem("退", "退出登录") { confirmLogout() }
+            MenuItem(R.drawable.ic_menu_logout, "退出登录") { confirmLogout() }
         )
 
         val loggedIn = AuthManager.isLoggedIn
@@ -350,7 +350,7 @@ class MineFragment : Fragment() {
             if (item.adminOnly && !AuthManager.isAdmin) return@forEach
             if (item.needLogin && !loggedIn) return@forEach
             val row = ItemMineMenuBinding.inflate(inflater, container, false)
-            row.tvIcon.text = item.icon
+            row.ivIcon.setImageResource(item.iconRes)
             row.tvTitle.text = item.title
             val sub = item.subtitle()
             row.tvSubtitle.text = sub

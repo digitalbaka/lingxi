@@ -56,18 +56,27 @@
                 android:singleLine="true"
                 android:textColor="@color/white"
                 android:textSize="15sp" />
-        </LinearLayout>
 
-        <TextView
-            android:id="@+id/btnFullscreen"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_margin="12dp"
-            android:background="@drawable/player_bg_control_btn"
-            android:text="全屏"
-            android:textColor="@color/white"
-            android:textSize="12sp" />
+            <TextView
+                android:id="@+id/btnQualityFs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/player_bg_control_btn"
+                android:text="清晰度"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btnFullscreen"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/player_bg_control_btn"
+                android:text="全屏"
+                android:textColor="@color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
     </FrameLayout>
 
     <LinearLayout

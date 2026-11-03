@@ -190,7 +190,9 @@ class SvgCaptchaView @JvmOverloads constructor(
             }
             "circle" -> {
                 val r = parseLen(attr(parser, "r")); if (r <= 0) return null
-                p.addCircle(parseLen(attr(parser, "cx")), parseLen(attr(parser, "cy")), r, Path.Direction.CW)
+                // 点阵字符半径过小会稀疏难认，放大 1.5 倍提升可读性（不影响排版坐标）
+                val rr = if (r in 0.5f..3f) r * 1.5f else r
+                p.addCircle(parseLen(attr(parser, "cx")), parseLen(attr(parser, "cy")), rr, Path.Direction.CW)
             }
             "ellipse" -> {
                 val rx = parseLen(attr(parser, "rx")); val ry = parseLen(attr(parser, "ry"))

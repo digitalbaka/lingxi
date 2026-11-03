@@ -24,11 +24,11 @@ data class LoginResult(
     val canUseRecovery: Boolean = false
 )
 
-/** 发送邮箱验证码：purpose=login 时 ticket 为 mfaTicket；register/bind 时 email 必填 */
+/** 发送邮箱验证码：purpose=login 时只需 ticket；register/bind 时只需 email。null 字段不序列化（避免空串触发 400） */
 data class SendCodeRequest(
     val purpose: String,
-    val email: String = "",
-    val ticket: String = "",
+    val email: String? = null,
+    val ticket: String? = null,
     val captchaId: String,
     val captchaCode: String
 )

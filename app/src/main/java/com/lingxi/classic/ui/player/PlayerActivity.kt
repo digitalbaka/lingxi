@@ -129,6 +129,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun initViews() {
         binding.btnBack.setOnClickListener { onBack() }
         binding.btnFullscreen.setOnClickListener { toggleFullscreen() }
+        binding.btnQualityFs.setOnClickListener {
+            video?.let { v -> if (v.qualityOptions.size > 1) showQualityDialog(v) else toast("该视频只有一个清晰度") }
+        }
         binding.playerContainer.post {
             applyOrientationLayout(resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
         }
@@ -254,6 +257,8 @@ class PlayerActivity : AppCompatActivity() {
             }
             else -> binding.tvQuality.visible = false
         }
+        // 视频加载完成后同步刷新全屏顶栏清晰度入口（先横屏后进详情的情况）
+        binding.btnQualityFs.visible = isFullscreen && v.qualityOptions.size > 1
     }
 
     // ==================== 播放 ====================
@@ -525,6 +530,8 @@ class PlayerActivity : AppCompatActivity() {
         binding.danmakuBar.visible = !landscape
         binding.scrollView.visible = !landscape
         binding.btnFullscreen.text = if (landscape) "退出" else "全屏"
+        // 全屏时在顶栏提供清晰度切换入口（竖屏入口在简介区）
+        binding.btnQualityFs.visible = landscape && (video?.qualityOptions?.size ?: 0) > 1
         WindowCompat.getInsetsController(window, window.decorView).apply {
             if (landscape) hide(WindowInsetsCompat.Type.systemBars())
             else show(WindowInsetsCompat.Type.systemBars())
