@@ -63,7 +63,7 @@ interface ApiService {
     suspend fun reportHistory(@Body body: HistoryReportRequest): ApiResponse<ActionResult>
 
     @POST("/api/v1/presence")
-    suspend fun presence(@Body body: Map<String, Long>): ApiResponse<PresenceResult>
+    suspend fun presence(@Body body: Map<String, @JvmSuppressWildcards Long>): ApiResponse<PresenceResult>
 
     @GET("/api/v1/stats")
     suspend fun getSiteStats(): ApiResponse<SiteStats>
@@ -72,7 +72,7 @@ interface ApiService {
     suspend fun getPartitions(): ApiResponse<PageData<Partition>>
 
     @GET("/api/v1/tags/hot")
-    suspend fun getHotTags(@Query("limit") limit: Int = 20): ApiResponse<ItemList<Map<String, Any>>>
+    suspend fun getHotTags(@Query("limit") limit: Int = 20): ApiResponse<ItemList<Map<String, @JvmSuppressWildcards Any>>>
 
     @GET("/api/v1/search")
     suspend fun search(
@@ -139,7 +139,7 @@ interface ApiService {
     suspend fun getMyFolders(): ApiResponse<ItemList<FavoriteFolder>>
 
     @POST("/api/v1/favorites/folders")
-    suspend fun createFolder(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun createFolder(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @GET("/api/v1/users/{uid}/folders")
     suspend fun getUserFolders(@Path("uid") uid: Long): ApiResponse<PageData<FavoriteFolder>>
@@ -171,7 +171,7 @@ interface ApiService {
     suspend fun getMyProfile(): ApiResponse<MeResponse>
 
     @HTTP(method = "PATCH", path = "/api/v1/users/me", hasBody = true)
-    suspend fun updateMyProfile(@Body body: Map<String, Any>): ApiResponse<MeResponse>
+    suspend fun updateMyProfile(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<MeResponse>
 
     @GET("/api/v1/users/{id}")
     suspend fun getUserSpace(@Path("id") id: Long): ApiResponse<SpaceInfo>
@@ -210,7 +210,7 @@ interface ApiService {
     suspend fun getExpLogs(@Query("page") page: Int = 1): ApiResponse<Any>
 
     @POST("/api/v1/users/me/password")
-    suspend fun changePassword(@Body body: Map<String, String>): ApiResponse<LoginResult>
+    suspend fun changePassword(@Body body: Map<String, @JvmSuppressWildcards String>): ApiResponse<LoginResult>
 
     // ==================== 动态/关注流 ====================
 
@@ -221,7 +221,7 @@ interface ApiService {
     suspend fun getDynamics(@Query("page") page: Int = 1, @Query("pageSize") pageSize: Int = 20): ApiResponse<PageData<Dynamic>>
 
     @POST("/api/v1/dynamics")
-    suspend fun postDynamic(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun postDynamic(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @DELETE("/api/v1/dynamics/{id}")
     suspend fun deleteDynamic(@Path("id") id: Long): ApiResponse<ActionResult>
@@ -247,7 +247,7 @@ interface ApiService {
     suspend fun refreshToken(): ApiResponse<LoginResult>
 
     @POST("/api/v1/auth/logout")
-    suspend fun logout(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun logout(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     // ==================== 节点 ====================
 
@@ -274,16 +274,16 @@ interface ApiService {
     ): ApiResponse<ChatHistory>
 
     @POST("/api/v1/messages")
-    suspend fun sendMessage(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun sendMessage(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @POST("/api/v1/messages/read")
-    suspend fun markMessagesRead(@Body body: Map<String, Long>): ApiResponse<ActionResult>
+    suspend fun markMessagesRead(@Body body: Map<String, @JvmSuppressWildcards Long>): ApiResponse<ActionResult>
 
     @GET("/api/v1/notifications")
     suspend fun getNotifications(@Query("type") type: String? = null, @Query("page") page: Int = 1): ApiResponse<PageData<Notification>>
 
     @POST("/api/v1/notifications/read")
-    suspend fun markNotificationsRead(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun markNotificationsRead(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @GET("/api/v1/notifications/summary")
     suspend fun getNotificationSummary(): ApiResponse<NotificationSummary>
@@ -330,7 +330,7 @@ interface ApiService {
     // ==================== 举报 ====================
 
     @POST("/api/v1/reports")
-    suspend fun submitReport(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun submitReport(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     // ==================== 管理员：内容审核 ====================
 
@@ -393,10 +393,10 @@ interface ApiService {
     suspend fun getAdminAds(): ApiResponse<ItemList<AdminAd>>
 
     @POST("/api/v1/admin/ads")
-    suspend fun createAd(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun createAd(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @HTTP(method = "PATCH", path = "/api/v1/admin/ads/{id}", hasBody = true)
-    suspend fun updateAd(@Path("id") id: Long, @Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun updateAd(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @DELETE("/api/v1/admin/ads/{id}")
     suspend fun deleteAd(@Path("id") id: Long): ApiResponse<ActionResult>
@@ -405,10 +405,10 @@ interface ApiService {
     suspend fun getAdminProducts(): ApiResponse<ItemList<ShopProduct>>
 
     @POST("/api/v1/admin/shop/products")
-    suspend fun createProduct(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun createProduct(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @HTTP(method = "PATCH", path = "/api/v1/admin/shop/products/{id}", hasBody = true)
-    suspend fun updateProduct(@Path("id") id: Long, @Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun updateProduct(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @DELETE("/api/v1/admin/shop/products/{id}")
     suspend fun deleteProduct(@Path("id") id: Long): ApiResponse<ActionResult>
@@ -417,7 +417,7 @@ interface ApiService {
     suspend fun getAdminOrders(@Query("status") status: String? = null, @Query("page") page: Int = 1): ApiResponse<PageData<ShopOrder>>
 
     @HTTP(method = "PATCH", path = "/api/v1/admin/shop/orders/{id}", hasBody = true)
-    suspend fun handleOrder(@Path("id") id: Long, @Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun handleOrder(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     // ==================== 管理员：系统管理 ====================
 
@@ -449,7 +449,7 @@ interface ApiService {
     suspend fun reviewWithdrawal(@Path("id") id: Long, @Body body: ReviewRequest): ApiResponse<ActionResult>
 
     @POST("/api/v1/admin/creator/withdrawals/{id}/pay")
-    suspend fun payWithdrawal(@Path("id") id: Long, @Body body: Map<String, String>): ApiResponse<ActionResult>
+    suspend fun payWithdrawal(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards String>): ApiResponse<ActionResult>
 
     @GET("/api/v1/admin/storage")
     suspend fun getAdminStorage(@Query("deep") deep: Int = 0): ApiResponse<AdminStorage>
@@ -458,7 +458,7 @@ interface ApiService {
     suspend fun rescanStorage(): ApiResponse<ActionResult>
 
     @PUT("/api/v1/admin/storage/settings")
-    suspend fun updateStorageSettings(@Body body: Map<String, Any>): ApiResponse<ActionResult>
+    suspend fun updateStorageSettings(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 
     @GET("/api/v1/admin/gateway")
     suspend fun getAdminGateway(): ApiResponse<AdminGateway>

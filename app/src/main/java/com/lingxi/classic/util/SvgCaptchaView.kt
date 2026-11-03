@@ -49,6 +49,14 @@ class SvgCaptchaView @JvmOverloads constructor(
             try {
                 parse(svg)
                 parseFailed = shapes.isEmpty()
+                // 噪声贝塞尔的控制点会探出 viewBox（浏览器视口裁剪后不可见），
+                // 直接按原始包围盒适配会把字符缩得很小——与 viewBox 求交后再适配
+                if (hasContent) {
+                    val clipped = RectF(contentBounds)
+                    if (clipped.intersect(viewBox)) {
+                        contentBounds.set(clipped)
+                    }
+                }
             } catch (_: Exception) {
                 shapes.clear()
             }
