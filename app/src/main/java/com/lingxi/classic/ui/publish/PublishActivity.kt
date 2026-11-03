@@ -232,32 +232,11 @@ class PublishActivity : AppCompatActivity() {
         binding.btnUpload.isEnabled = false
         lifecycleScope.launch {
             try {
-                val fileBody = bytes.toRequestBody("application/octet-stream".toMediaType())
-                val countingBody = CountingRequestBody(fileBody) { written, total ->
+                val result = uploadBytes(scope, pickedName, bytes) { written, total ->
                     runOnUiThread {
                         val percent = if (total > 0) (written * 100 / total).toInt() else 0
                         binding.progressUpload.progress = percent
                         binding.tvProgress.text = "$percent%"
-                    }
-                }
-                val part = MultipartBody.Part.createFormData("file", pickedName, countingBody)
-                val multipart = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addPart(part)
-                    .build()
-                val request = Request.Builder()
-                    .url("${ApiClient.BASE_URL}/api/v1/upload?scope=$scope")
-                    .post(multipart)
-                    .header("Authorization", "Bearer ${AuthManager.token}")
-                    .header("X-Device-Id", AuthManager.deviceId)
-                    .header("X-Device-Label", AuthManager.DEVICE_LABEL)
-                    .build()
-
-                val result = withContext(Dispatchers.IO) {
-                    uploadClient.newCall(request).execute().use { response ->
-                        val bodyStr = response.body?.string() ?: return@withContext null
-                        val type = object : TypeToken<ApiResponse<UploadResult>>() {}.type
-                        ApiClient.gson.fromJson<ApiResponse<UploadResult>>(bodyStr, type)
                     }
                 }
                 val url = result?.data?.url
@@ -277,6 +256,44 @@ class PublishActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 统一上传通道：用户切换了直连节点时直连节点上传（与播放链路相同的
+     * handoff 授权 + X-Forwarded-For），否则走主站。
+     */
+    private suspend fun uploadBytes(
+        scope: String,
+        fileName: String,
+        bytes: ByteArray,
+        onProgress: ((written: Long, total: Long) -> Unit)? = null
+    ): ApiResponse<UploadResult>? {
+        val fileBody = bytes.toRequestBody("application/octet-stream".toMediaType())
+        val requestBody = if (onProgress != null) CountingRequestBody(fileBody, onProgress) else fileBody
+        val part = MultipartBody.Part.createFormData("file", fileName, requestBody)
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addPart(part)
+            .build()
+
+        val viaNode = com.lingxi.classic.data.PlaybackHelper.usingDirectNode()
+        val builder = Request.Builder()
+            .url("${com.lingxi.classic.data.PlaybackHelper.uploadBaseUrl()}/api/v1/upload?scope=$scope")
+            .post(multipart)
+            .header("Authorization", "Bearer ${AuthManager.token}")
+            .header("X-Device-Id", AuthManager.deviceId)
+            .header("X-Device-Label", AuthManager.DEVICE_LABEL)
+        if (viaNode) {
+            com.lingxi.classic.data.PlaybackHelper.ensureNodeGranted()
+            AuthManager.nodeGrantedIp?.let { builder.header("X-Forwarded-For", it) }
+        }
+        return withContext(Dispatchers.IO) {
+            uploadClient.newCall(builder.build()).execute().use { response ->
+                val bodyStr = response.body?.string() ?: return@withContext null
+                val type = object : TypeToken<ApiResponse<UploadResult>>() {}.type
+                ApiClient.gson.fromJson<ApiResponse<UploadResult>>(bodyStr, type)
+            }
+        }
+    }
+
     // ==================== 封面 ====================
 
     private fun uploadCover(uri: Uri) {
@@ -290,18 +307,17 @@ class PublishActivity : AppCompatActivity() {
                     return@launch
                 }
                 val name = queryDisplayName(uri) ?: "cover.jpg"
-                val body = bytes.toRequestBody("application/octet-stream".toMediaType())
-                val part = MultipartBody.Part.createFormData("file", name, body)
-                val resp = ApiClient.apiService.upload("covers", part)
-                val url = resp.data?.url
-                if (resp.isSuccess && !url.isNullOrEmpty()) {
+                // 封面同样走节点感知上传通道（切换直连节点时直连节点）
+                val resp = uploadBytes("covers", name, bytes)
+                val url = resp?.data?.url
+                if (resp != null && resp.isSuccess && !url.isNullOrEmpty()) {
                     coverUrl = url
                     binding.tvCoverState.text = "已上传"
                     binding.ivCoverPreview.visible = true
                     ImageLoader.load(binding.ivCoverPreview, ApiClient.fullUrl(url))
                 } else {
                     binding.tvCoverState.text = "上传失败"
-                    toast(resp.message.ifBlank { "封面上传失败" })
+                    toast(resp?.message?.ifBlank { "封面上传失败" } ?: "封面上传失败")
                 }
             } catch (e: Exception) {
                 binding.tvCoverState.text = "上传失败"

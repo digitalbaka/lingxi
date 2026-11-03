@@ -118,6 +118,14 @@ class MainActivity : AppCompatActivity() {
         binding.tabPartition.setOnClickListener { switchTab(1) }
         binding.tabDynamics.setOnClickListener { switchTab(2) }
         binding.tabMine.setOnClickListener { switchTab(3) }
+        binding.tabPublish.setOnClickListener {
+            if (!com.lingxi.classic.data.auth.AuthManager.isLoggedIn) {
+                toast("请先登录后再投稿")
+                startActivity(Intent(this, com.lingxi.classic.ui.auth.LoginActivity::class.java))
+            } else {
+                startActivity(Intent(this, com.lingxi.classic.ui.publish.PublishActivity::class.java))
+            }
+        }
     }
 
     private fun switchTab(index: Int, force: Boolean = false) {

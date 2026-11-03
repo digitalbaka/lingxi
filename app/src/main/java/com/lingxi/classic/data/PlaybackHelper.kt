@@ -30,6 +30,13 @@ object PlaybackHelper {
     /** 当前是否使用直连节点 */
     fun usingDirectNode(): Boolean = AuthManager.nodeId != 0L && !AuthManager.nodeUrl.isNullOrEmpty()
 
+    /**
+     * 上传服务基址：用户切换了直连节点时，上传（视频/音频/封面）直连该节点，
+     * 与播放链路一致（节点反向代理站点 API + handoff 授权 + X-Forwarded-For）。
+     */
+    fun uploadBaseUrl(): String =
+        if (usingDirectNode()) AuthManager.nodeUrl!!.trimEnd('/') else ApiClient.BASE_URL
+
     /** 确保直连节点已授权（handoff）。返回 true 表示可用 */
     suspend fun ensureNodeGranted(): Boolean {
         if (!usingDirectNode()) return true
