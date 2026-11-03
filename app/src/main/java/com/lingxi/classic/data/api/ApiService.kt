@@ -31,6 +31,16 @@ interface ApiService {
     @GET("/api/v1/videos/recommend")
     suspend fun getRecommend(@Query("page") page: Int = 1, @Query("pageSize") pageSize: Int = 20): ApiResponse<PageData<Video>>
 
+    /** 首页轮播：广告在前、用户海报在后；空数组时前端回落到推荐视频轮播 */
+    @GET("/api/v1/ads")
+    suspend fun getAds(@Query("position") position: String = "home"): ApiResponse<ItemList<AdItem>>
+
+    @POST("/api/v1/promotions/{type}/{id}/impression")
+    suspend fun reportPromotionImpression(@Path("type") type: String, @Path("id") id: Long): ApiResponse<ActionResult>
+
+    @POST("/api/v1/promotions/{type}/{id}/click")
+    suspend fun reportPromotionClick(@Path("type") type: String, @Path("id") id: Long): ApiResponse<ActionResult>
+
     @GET("/api/v1/videos/pinned")
     suspend fun getPinned(@Query("limit") limit: Int = 12): ApiResponse<ItemList<Video>>
 

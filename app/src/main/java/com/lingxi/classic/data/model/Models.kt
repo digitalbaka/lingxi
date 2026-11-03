@@ -1,5 +1,7 @@
 package com.lingxi.classic.data.model
 
+import com.google.gson.annotations.SerializedName
+
 /** 通用 API 响应包装：code==0 成功，失败时 message 可直接展示 */
 data class ApiResponse<T>(
     val code: Int = 0,
@@ -220,7 +222,7 @@ data class Comment(
     val replyCount: Int = 0,
     val replies: List<Comment> = emptyList(),
     val createdAt: Long = 0,
-    val user: UserInfo? = null
+    @SerializedName("author") val user: UserInfo? = null
 )
 
 data class CommentListResult(
@@ -240,8 +242,21 @@ data class Dynamic(
     val kind: String = "text",
     val content: String = "",
     val createdAt: Long = 0,
-    val user: UserInfo? = null,
+    @SerializedName("author") val user: UserInfo? = null,
     val video: Video? = null
+)
+
+/** 首页轮播：管理员广告与用户海报的归一化混合列表 */
+data class AdItem(
+    val id: Long = 0,
+    val kind: String = "ad",
+    val title: String = "",
+    val imageUrl: String = "",
+    val linkUrl: String = "",
+    val label: String = "",
+    val ownerName: String = "",
+    val viewCount: Long = 0,
+    val clickCount: Long = 0
 )
 
 // ==================== 站点状态 ====================

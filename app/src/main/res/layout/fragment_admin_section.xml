@@ -16,5 +16,6 @@
         android:id="@+id/childContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/lx_bg" />
+        android:background="@color/lx_bg"
+        android:visibility="gone" />
 </FrameLayout>

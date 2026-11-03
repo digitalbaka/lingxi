@@ -29,6 +29,8 @@ class SvgCaptchaView @JvmOverloads constructor(
 
     private val shapes = ArrayList<Shape>(16)
     private var viewBox = RectF(0f, 0f, 100f, 40f)
+    private var contentBounds = RectF()
+    private var hasContent = false
     private var parseFailed = false
 
     private val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -40,6 +42,8 @@ class SvgCaptchaView @JvmOverloads constructor(
     /** 设置 SVG 字符串；null/空/解析失败 → 显示占位文字 */
     fun setSvg(svg: String?) {
         shapes.clear()
+        contentBounds = RectF()
+        hasContent = false
         parseFailed = true
         if (!svg.isNullOrBlank()) {
             try {
@@ -58,12 +62,12 @@ class SvgCaptchaView @JvmOverloads constructor(
             canvas.drawText("点击刷新验证码", width / 2f, height / 2f + fallbackPaint.textSize / 3f, fallbackPaint)
             return
         }
-        val sx = width / viewBox.width()
-        val sy = height / viewBox.height()
-        val scale = minOf(sx, sy)
+        // 以实际内容包围盒适配：验证码字符只占 viewBox 中间窄条，按 viewBox 适配会留出大量空白、字符过小
+        val bounds = if (hasContent && contentBounds.width() > 0 && contentBounds.height() > 0) contentBounds else viewBox
+        val scale = minOf(width / bounds.width(), height / bounds.height())
         canvas.save()
-        canvas.translate((width - viewBox.width() * scale) / 2f - viewBox.left * scale,
-            (height - viewBox.height() * scale) / 2f - viewBox.top * scale)
+        canvas.translate((width - bounds.width() * scale) / 2f - bounds.left * scale,
+            (height - bounds.height() * scale) / 2f - bounds.top * scale)
         canvas.scale(scale, scale)
         for (s in shapes) canvas.drawPath(s.path, s.paint)
         canvas.restore()
@@ -108,7 +112,11 @@ class SvgCaptchaView @JvmOverloads constructor(
                         val path = buildShape(name, parser)
                         if (path != null) {
                             path.transform(mx)
-                            emitShapes(path, st)
+                            // 铺满 viewBox 的背景 rect 不计入内容包围盒
+                            val isBackground = name == "rect" &&
+                                parseLen(attr(parser, "width")) >= viewBox.width() * 0.9f &&
+                                parseLen(attr(parser, "height")) >= viewBox.height() * 0.9f
+                            emitShapes(path, st, countInBounds = !isBackground)
                         }
                     }
                 }
@@ -222,7 +230,19 @@ class SvgCaptchaView @JvmOverloads constructor(
         return p
     }
 
-    private fun emitShapes(path: Path, st: PaintState) {
+    private fun emitShapes(path: Path, st: PaintState, countInBounds: Boolean = true) {
+        // 累计内容包围盒（填充/描边共用同一路径）
+        if (countInBounds) {
+            val tmp = RectF()
+            path.computeBounds(tmp, true)
+            val grow = if (st.stroke != null) st.strokeWidth else 0f
+            if (!hasContent) {
+                contentBounds.set(tmp.left - grow, tmp.top - grow, tmp.right + grow, tmp.bottom + grow)
+                hasContent = true
+            } else {
+                contentBounds.union(tmp.left - grow, tmp.top - grow, tmp.right + grow, tmp.bottom + grow)
+            }
+        }
         st.fill?.let { c ->
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
