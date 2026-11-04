@@ -1,6 +1,10 @@
 package com.lingxi.classic.util
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -51,4 +55,20 @@ fun <T> com.lingxi.classic.data.model.ApiResponse<T>.unwrap(context: Context? = 
     if (isSuccess) return data
     context?.toast(message.ifBlank { "请求失败 ($code)" })
     return null
+}
+
+/**
+ * 打开网页：统一走系统默认浏览器（ACTION_VIEW + BROWSABLE），不指定具体应用。
+ * 由系统默认应用设置或应用选择器决定用哪个浏览器；无可用浏览器时给出提示，不让应用崩溃。
+ */
+fun Context.openInBrowser(url: String) {
+    val page = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        if (this@openInBrowser !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        startActivity(page)
+    } catch (e: ActivityNotFoundException) {
+        toast("未找到可用浏览器")
+    }
 }

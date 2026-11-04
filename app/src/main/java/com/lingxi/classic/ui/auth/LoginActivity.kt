@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.text.InputType
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.lingxi.classic.data.api.ApiClient
@@ -132,12 +133,26 @@ class LoginActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                toast("网络错误：${e.message}")
+                // 登录是 POST，不做自动重试（避免服务端生成重复会话）：只给可读原因 + 让用户手动点按钮重试
+                Log.w("LingXiApi", "login failed: ${e.javaClass.simpleName} / ${ApiClient.classifyError(e)}")
+                toast(loginErrorText(e))
                 refreshCaptchaIfShown()
             } finally {
                 binding.btnLogin.isEnabled = true
             }
         }
+    }
+
+    /** 登录异常按类型给可读文案；错误详情只进日志，不把异常类名糊到用户脸上 */
+    private fun loginErrorText(e: Throwable): String = when (ApiClient.classifyError(e)) {
+        ApiClient.ErrorKind.TLS ->
+            "加密连接失败（TLS 握手/证书异常），可能有网络拦截，请换个网络后点「登录」重试"
+        ApiClient.ErrorKind.NO_NETWORK ->
+            "网络连接失败，请检查 Wi-Fi 后点「登录」重试"
+        ApiClient.ErrorKind.SERVER ->
+            "服务器暂时不可用，请稍后点「登录」重试"
+        ApiClient.ErrorKind.UNKNOWN ->
+            "登录请求失败，请点「登录」重试"
     }
 
     // ==================== 第二步：邮箱验证码 ====================
@@ -168,11 +183,21 @@ class LoginActivity : AppCompatActivity() {
                     loadCaptcha()
                 }
             } catch (e: Exception) {
-                toast("网络错误：${e.message}")
+                // 发码是 POST，不自动重试（避免重复发码）：只给可读原因，让用户手动再点
+                Log.w("LingXiApi", "send-code failed: ${e.javaClass.simpleName} / ${ApiClient.classifyError(e)}")
+                toast(sendCodeErrorText(e))
                 binding.btnSendCode.isEnabled = true
                 loadCaptcha()
             }
         }
+    }
+
+    /** 发码失败按类型给可读文案；错误详情只进日志 */
+    private fun sendCodeErrorText(e: Throwable): String = when (ApiClient.classifyError(e)) {
+        ApiClient.ErrorKind.TLS -> "网络握手失败（TLS 未完成），请重试"
+        ApiClient.ErrorKind.NO_NETWORK -> "网络连接超时，请检查网络后重试"
+        ApiClient.ErrorKind.SERVER -> "服务器暂时不可用，请稍后重试"
+        ApiClient.ErrorKind.UNKNOWN -> "发送失败，请重试"
     }
 
     private fun confirm2fa() {

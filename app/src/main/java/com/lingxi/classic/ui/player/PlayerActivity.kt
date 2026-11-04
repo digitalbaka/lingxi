@@ -9,9 +9,11 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -46,6 +48,7 @@ import com.lingxi.classic.ui.common.InteractionBar
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
+import com.lingxi.classic.util.dp
 import com.lingxi.classic.util.isTablet
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
@@ -57,8 +60,9 @@ import kotlinx.coroutines.launch
 
 /**
  * 视频播放页（kind=video）。
- * 竖屏：16:9 播放器 + 弹幕输入条 + NestedScrollView（信息/相关推荐/评论）。
- * 横屏全屏：隐藏滚动区并沉浸式。
+ * 手机：16:9 播放器 + 弹幕输入条 + NestedScrollView（信息/相关推荐/评论）；横屏为全屏。
+ * 平板横屏：左列 16:9 播放器（限高）+ 右列弹幕/信息双列（参考哔哩哔哩 HD）；全屏时右列隐藏。
+ * 平板竖屏：仍按单列（播放器在上、信息在下），不改变手机端与平板竖屏的既有外观。
  */
 class PlayerActivity : AppCompatActivity() {
 
@@ -132,6 +136,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        // 进页不抢焦点：焦点先落在根容器，键盘只在用户主动点弹幕输入框时出现
+        binding.rootLayout.requestFocus()
+        binding.rootLayout.post { hideKeyboard() }
+
         binding.btnBack.setOnClickListener { onBack() }
         binding.btnFullscreen.setOnClickListener { toggleFullscreen() }
         binding.btnQualityFs.setOnClickListener {
@@ -241,12 +249,14 @@ class PlayerActivity : AppCompatActivity() {
             binding.tvDesc.visible = true
             binding.tvDesc.text = v.description
             binding.tvDesc.maxLines = 2
-            binding.tvDesc.setOnClickListener {
-                descExpanded = !descExpanded
-                binding.tvDesc.maxLines = if (descExpanded) Int.MAX_VALUE else 2
-            }
+            binding.tvDesc.setOnClickListener { toggleDesc() }
+            binding.tvDescToggle.text = "展开"
+            binding.tvDescToggle.setOnClickListener { toggleDesc() }
+            // 布局完成后再判断第二行是否被省略号截断，短简介不显示「展开」
+            binding.tvDesc.post { updateDescToggle() }
         } else {
             binding.tvDesc.visible = false
+            binding.tvDescToggle.visible = false
         }
 
         when {
@@ -264,6 +274,30 @@ class PlayerActivity : AppCompatActivity() {
         }
         // 视频加载完成后同步刷新全屏顶栏清晰度入口（先横屏后进详情的情况）
         binding.btnQualityFs.visible = isFullscreen && v.qualityOptions.size > 1
+    }
+
+    /** 简介展开/收起：仅切换两行截断的展示，不改其他信息区 */
+    private fun toggleDesc() {
+        descExpanded = !descExpanded
+        binding.tvDesc.maxLines = if (descExpanded) Int.MAX_VALUE else 2
+        binding.tvDesc.post { updateDescToggle() }
+    }
+
+    /** 「展开/收起」只在简介确实被截断时出现；展开状态始终保留可收起入口 */
+    private fun updateDescToggle() {
+        if (binding.tvDesc.visibility != View.VISIBLE) {
+            binding.tvDescToggle.visible = false
+            return
+        }
+        if (descExpanded) {
+            binding.tvDescToggle.text = "收起"
+            binding.tvDescToggle.visible = true
+            return
+        }
+        val layout = binding.tvDesc.layout
+        binding.tvDescToggle.text = "展开"
+        binding.tvDescToggle.visible = layout != null && layout.lineCount > 0 &&
+            layout.getEllipsisCount(layout.lineCount - 1) > 0
     }
 
     // ==================== 播放 ====================
@@ -535,29 +569,82 @@ class PlayerActivity : AppCompatActivity() {
     private fun applyOrientationLayout(landscape: Boolean) {
         val fullscreen = if (isTablet()) tabletFullscreen else landscape
         isFullscreen = fullscreen
+
         val dm = resources.displayMetrics
-        val lp = binding.playerContainer.layoutParams as LinearLayout.LayoutParams
-        if (fullscreen) {
-            lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
-            lp.gravity = Gravity.NO_GRAVITY
-        } else {
-            var w = ViewGroup.LayoutParams.MATCH_PARENT
-            var h = dm.widthPixels * 9 / 16
-            if (isTablet()) {
-                // 平板横屏下 16:9 全宽会占满甚至超出屏幕高度，按 3/4 屏高约束并水平居中
-                val maxH = dm.heightPixels * 3 / 4
-                if (h > maxH) {
-                    h = maxH
-                    w = maxH * 16 / 9
-                }
+        val gapPx = 16.dp(this)
+        val minRightPx = 320.dp(this)
+        // 平板横屏嵌入态 = 双列；平板竖屏与手机保持单列
+        val dualColumn = isTablet() && landscape && !fullscreen
+
+        binding.rootLayout.orientation = if (dualColumn) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+
+        val columnLp = binding.playerColumn.layoutParams as LinearLayout.LayoutParams
+        val infoLp = binding.infoColumn.layoutParams as LinearLayout.LayoutParams
+        val playerLp = binding.playerContainer.layoutParams as FrameLayout.LayoutParams
+
+        when {
+            fullscreen -> {
+                columnLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                columnLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                columnLp.weight = 0f
+                columnLp.marginEnd = 0
+                infoLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                infoLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                infoLp.weight = 0f
+                infoLp.marginStart = 0
+                playerLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                playerLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                playerLp.gravity = Gravity.NO_GRAVITY
             }
-            lp.width = w
-            lp.height = h
-            lp.gravity = if (w == ViewGroup.LayoutParams.MATCH_PARENT)
-                Gravity.NO_GRAVITY else Gravity.CENTER_HORIZONTAL
+            dualColumn -> {
+                // 左列按 16:9 自然宽度，同时满足：高度不超过屏高 60%、右列不少于 320dp
+                val widthByHeight = (dm.heightPixels * 0.60f * 16 / 9).toInt()
+                val widthByRightColumn = (dm.widthPixels - gapPx - minRightPx).coerceAtLeast(dm.widthPixels / 2)
+                val playerW = minOf(widthByHeight, widthByRightColumn)
+                val playerH = playerW * 9 / 16
+
+                columnLp.width = playerW
+                columnLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                columnLp.weight = 0f
+                columnLp.marginEnd = gapPx
+                infoLp.width = 0
+                infoLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                infoLp.weight = 1f
+                infoLp.marginStart = 0
+                playerLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                playerLp.height = playerH
+                playerLp.gravity = Gravity.CENTER
+            }
+            else -> {
+                var w = ViewGroup.LayoutParams.MATCH_PARENT
+                var h = dm.widthPixels * 9 / 16
+                if (isTablet()) {
+                    // 平板竖屏：16:9 也不会超过屏高，保留原有兜底约束
+                    val maxH = dm.heightPixels * 3 / 4
+                    if (h > maxH) {
+                        h = maxH
+                        w = maxH * 16 / 9
+                    }
+                }
+                columnLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                columnLp.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                columnLp.weight = 0f
+                columnLp.marginEnd = 0
+                infoLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                infoLp.height = 0
+                infoLp.weight = 1f
+                infoLp.marginStart = 0
+                playerLp.width = w
+                playerLp.height = h
+                playerLp.gravity = if (w == ViewGroup.LayoutParams.MATCH_PARENT)
+                    Gravity.NO_GRAVITY else Gravity.CENTER_HORIZONTAL
+            }
         }
-        binding.playerContainer.layoutParams = lp
+        binding.playerColumn.layoutParams = columnLp
+        binding.infoColumn.layoutParams = infoLp
+        binding.playerContainer.layoutParams = playerLp
+
+        binding.infoColumn.visible = !fullscreen
         binding.danmakuBar.visible = !fullscreen
         binding.scrollView.visible = !fullscreen
         binding.btnFullscreen.text = if (fullscreen) "退出" else "全屏"
@@ -567,6 +654,8 @@ class PlayerActivity : AppCompatActivity() {
             if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())
             else show(WindowInsetsCompat.Type.systemBars())
         }
+        // 旋转/切换双列后简介可用宽度变化，重新判断是否还显示「展开」
+        binding.tvDesc.post { updateDescToggle() }
     }
 
     private fun onBack() {
@@ -580,7 +669,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun hideKeyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(binding.etDanmaku.windowToken, 0)
+        imm.hideSoftInputFromWindow(binding.rootLayout.windowToken, 0)
     }
 
     // ==================== 生命周期 ====================

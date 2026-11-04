@@ -52,6 +52,9 @@ class VideoAdapter(
 
     fun getItems(): List<Video> = items
 
+    /** 真实视频条数（不含头部）；空态/错误态判断必须用它，不能用 itemCount（永远含 Banner 头部） */
+    val dataCount: Int get() = items.size
+
     class VH(val binding: ItemVideoBinding) : RecyclerView.ViewHolder(binding.root)
     class HeaderVH(itemView: View) : RecyclerView.ViewHolder(itemView)
 

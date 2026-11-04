@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">凌汐经典版</string>
+    <string name="app_name">凌汐HD</string>
+
+    <!-- 网络错误分层文案：让用户能区分「自己网络」「加密连接」「服务端」 -->
+    <string name="net_error_no_network">网络连接失败，请检查 Wi-Fi 或换一个网络再试</string>
+    <string name="net_error_tls">加密连接失败（TLS 握手/证书异常），可能有网络拦截，请换个网络再试</string>
+    <string name="net_error_server">服务器暂时不可用（HTTP %1$d），已自动重试，请稍后再试</string>
+    <string name="net_error_unknown">加载失败，请稍后重试</string>
+    <string name="home_loading">正在加载…</string>
+    <string name="home_retrying">正在重试 (%1$d/%2$d)…</string>
 </resources>
