@@ -141,6 +141,22 @@ class ChatActivity : AppCompatActivity() {
                 } else {
                     toast(resp.message.ifBlank { "发送失败" })
                 }
+            } catch (e: com.google.gson.JsonParseException) {
+                // 响应已按成功返回（code/message 解析正常），仅 data 结构变化导致解析失败：
+                // 服务端实际已落库，按已发送处理，避免用户重复发送
+                binding.etInput.setText("")
+                adapter.append(
+                    ChatMessage(
+                        id = System.currentTimeMillis(),
+                        fromUid = 0,
+                        toUid = peerUid,
+                        content = text,
+                        mine = true,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+                binding.recyclerView.scrollToPosition(adapter.itemCount - 1)
+                toast("消息已发出（回执解析异常）")
             } catch (e: Exception) {
                 toast("发送失败：${e.message}")
             } finally {

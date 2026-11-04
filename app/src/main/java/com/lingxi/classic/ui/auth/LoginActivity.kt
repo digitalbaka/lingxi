@@ -13,6 +13,7 @@ import com.lingxi.classic.data.model.LoginRequest
 import com.lingxi.classic.data.model.SendCodeRequest
 import com.lingxi.classic.data.model.Verify2faRequest
 import com.lingxi.classic.databinding.ActivityLoginBinding
+import com.lingxi.classic.util.centerContentOnTablet
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.toastLong
 import com.lingxi.classic.util.visible
@@ -32,6 +33,8 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // 平板：表单列限宽居中，避免宽屏下输入框被拉得过长
+        binding.formRoot.centerContentOnTablet(480)
 
         // 图形验证码属于二次验证步骤（发送邮箱验证码时服务端才要求），此处只挂刷新，不预加载
         binding.webCaptcha.setOnClickListener { loadCaptcha() }

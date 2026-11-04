@@ -2,7 +2,7 @@
 buildscript {
     ext {
         kotlin_version = '1.9.22'
-        agp_version = '7.4.2'
+        agp_version = '8.2.2'
     }
     repositories {
         google()

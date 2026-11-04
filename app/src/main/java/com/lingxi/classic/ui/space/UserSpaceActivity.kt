@@ -1,4 +1,4 @@
-﻿package com.lingxi.classic.ui.space
+package com.lingxi.classic.ui.space
 
 import android.app.AlertDialog
 import android.os.Bundle

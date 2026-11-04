@@ -32,6 +32,7 @@ import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.MarkdownRenderer
+import com.lingxi.classic.util.centerContentOnTablet
 import com.lingxi.classic.util.dp
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
@@ -80,6 +81,8 @@ class ArticleActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityArticleBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // 平板：正文列限宽居中，控制阅读行宽
+        binding.articleColumn.centerContentOnTablet(760)
 
         videoId = intent.getLongExtra(Navigator.EXTRA_VIDEO_ID, 0)
         if (videoId <= 0) {

@@ -10,6 +10,7 @@ import com.lingxi.classic.data.model.Captcha
 import com.lingxi.classic.data.model.RegisterRequest
 import com.lingxi.classic.data.model.SendCodeRequest
 import com.lingxi.classic.databinding.ActivityRegisterBinding
+import com.lingxi.classic.util.centerContentOnTablet
 import com.lingxi.classic.util.toast
 import kotlinx.coroutines.launch
 
@@ -25,6 +26,8 @@ class RegisterActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityRegisterBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // 平板：表单列限宽居中，避免宽屏下输入框被拉得过长
+        binding.formRoot.centerContentOnTablet(480)
 
         binding.webCaptcha.setOnClickListener { loadCaptcha() }
         loadCaptcha()
