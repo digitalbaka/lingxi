@@ -2,6 +2,7 @@ package com.lingxi.classic.util
 
 import android.graphics.Color
 import android.graphics.Typeface
+import android.os.Build
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
@@ -91,7 +92,13 @@ object MarkdownRenderer {
                 val text = line.trimStart().removePrefix(">").trim()
                 val start = out.length
                 appendInline(out, text)
-                out.setSpan(QuoteSpan(COLOR_QUOTE, 12, 24), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                // QuoteSpan(color, stripeWidth, gapWidth) 自 API 28 才有；
+                // 低版本调用会 NoSuchMethodError（Android 7 上含引用块的文章直接闪退）
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    out.setSpan(QuoteSpan(COLOR_QUOTE, 12, 24), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                } else {
+                    out.setSpan(QuoteSpan(), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
                 out.setSpan(StyleSpan(Typeface.ITALIC), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 out.append('\n')
             }

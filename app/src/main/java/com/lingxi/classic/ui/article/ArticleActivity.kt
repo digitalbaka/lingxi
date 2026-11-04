@@ -1,8 +1,10 @@
 package com.lingxi.classic.ui.article
 
+import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -95,6 +97,10 @@ class ArticleActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        // 与播放页同因：根容器不可聚焦时，框架会把首个 focusableInTouchMode 控件（评论输入框）
+        // 选为初始焦点，导致进页面就弹键盘并滚到评论区。这里让根容器先拿到焦点。
+        binding.articleRoot.requestFocus()
+        binding.articleRoot.post { hideKeyboard() }
         binding.btnBack.setOnClickListener { finish() }
         binding.btnPlayPause.setOnClickListener { toggleAudio() }
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -114,6 +120,11 @@ class ArticleActivity : AppCompatActivity() {
             }
         }
         interactionBar = InteractionBar(this, binding.interactionBar.root)
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(binding.articleRoot.windowToken, 0)
     }
 
     private fun loadDetail(id: Long) {

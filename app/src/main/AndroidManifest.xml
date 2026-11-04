@@ -62,7 +62,8 @@
 
         <activity
             android:name=".ui.article.ArticleActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
 
         <activity android:name=".ui.search.SearchActivity"
             android:windowSoftInputMode="adjustResize" />
