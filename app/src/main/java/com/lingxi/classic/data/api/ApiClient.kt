@@ -3,7 +3,12 @@ package com.lingxi.classic.data.api
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
+import com.google.gson.TypeAdapterFactory
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.lingxi.classic.BuildConfig
 import com.lingxi.classic.data.auth.AuthManager
 import com.lingxi.classic.data.model.ApiResponse
@@ -32,7 +37,37 @@ object ApiClient {
     private val RETRYABLE_HTTP_CODES = setOf(502, 503, 504)
     private const val MAX_SERVER_RETRY = 3
 
-    val gson: Gson by lazy { GsonBuilder().serializeNulls().create() }
+    /**
+     * 容错 String 适配器：个别接口把 `data.message` 返回成对象（如私信发送返回消息实体），
+     * 而 DTO 中该字段声明为 String。严格反序列化会抛 JsonSyntaxException，使「已发送成功」
+     * 被误判为失败。这里对对象/数组跳过并回填空串，业务结果仍以响应 code 为准。
+     */
+    private val lenientStringFactory = object : TypeAdapterFactory {
+        override fun <T> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? {
+            if (type.rawType != String::class.java) return null
+            val delegate = gson.getDelegateAdapter(this, type)
+            return object : TypeAdapter<T>() {
+                override fun write(out: JsonWriter, value: T) = delegate.write(out, value)
+
+                @Suppress("UNCHECKED_CAST")
+                override fun read(reader: JsonReader): T {
+                    val token = reader.peek()
+                    if (token == JsonToken.BEGIN_OBJECT || token == JsonToken.BEGIN_ARRAY) {
+                        reader.skipValue()
+                        return "" as T
+                    }
+                    return delegate.read(reader)
+                }
+            }
+        }
+    }
+
+    val gson: Gson by lazy {
+        GsonBuilder()
+            .serializeNulls()
+            .registerTypeAdapterFactory(lenientStringFactory)
+            .create()
+    }
 
     /** 刷新令牌专用客户端：不带鉴权与 401 处理，避免刷新请求再触发刷新 */
     private val tokenClient: OkHttpClient by lazy {
