@@ -10,6 +10,7 @@
 - 应用图标更换为「兼容版」专用图标（绿色猫咪 + 红色兼容版横幅）
 
 ### 修复
+- 私信「发送成功却提示失败」：发送接口 `data.message` 返回对象，与 DTO 中的 String 不匹配导致反序列化抛异常；现按业务 code 判定结果，解析异常不再误判为发送失败，并覆盖共用 `ActionResult` 的 29 个接口
 - 编译失败：`UserSpaceActivity.kt` 首部混入多个游离 BOM，导致 15 个编译错误，已清除
 - 验证码字符过小：改为内容包围盒与 viewBox 求交后再适配，噪声曲线不再把字符压小
 - Retrofit 参数序列化异常：Map 类型请求参数补充 `@JvmSuppressWildcards`
