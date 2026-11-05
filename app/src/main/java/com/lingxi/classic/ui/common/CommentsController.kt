@@ -1,5 +1,6 @@
 package com.lingxi.classic.ui.common
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -7,6 +8,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -118,11 +120,25 @@ class CommentsController(
                     .unwrap(context) ?: return@launch
                 input.etComment.setText("")
                 context.toast("评论成功")
+                hideKeyboard()
                 refresh()
             } catch (e: Exception) {
                 context.toast("发送失败：${e.message}")
             }
         }
+    }
+
+    /**
+     * 发送成功后收起键盘（失败路径不调用，保留输入内容与键盘）。
+     * token 取宿主 Activity 的 decorView，其次退回输入条根视图的 windowToken：
+     * etComment 这时候可能已经因为清空文本而失去焦点，用它自己的 token 不一定有效。
+     */
+    private fun hideKeyboard() {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
+        val token = (context as? Activity)?.window?.decorView?.windowToken
+            ?: input.root.windowToken
+            ?: return
+        imm.hideSoftInputFromWindow(token, 0)
     }
 
     private fun toggleLike(comment: Comment, position: Int) {

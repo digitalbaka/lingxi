@@ -23,6 +23,7 @@ import com.lingxi.classic.R
 import com.lingxi.classic.data.api.ApiClient
 import com.lingxi.classic.data.auth.AuthManager
 import com.lingxi.classic.data.model.CoinLog
+import com.lingxi.classic.data.model.expiresAtMillis
 import com.lingxi.classic.databinding.FragmentMineBinding
 import com.lingxi.classic.databinding.ItemMineMenuBinding
 import com.lingxi.classic.ui.auth.LoginActivity
@@ -33,6 +34,7 @@ import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.dp
 import com.lingxi.classic.util.toast
+import com.lingxi.classic.util.toastError
 import com.lingxi.classic.util.toastLong
 import com.lingxi.classic.util.unwrap
 import com.lingxi.classic.util.visible
@@ -128,7 +130,9 @@ class MineFragment : Fragment() {
                 checkedInToday = me.checkedInToday
                 updateCheckinUi()
             } catch (e: Exception) {
-                requireContext().toast("加载资料失败：${e.message}")
+                // 401 只代表这次请求没通过鉴权（可能是令牌刚过期、节点/网关问题），
+                // 不在这里清理登录态，按异常类型给出可读提示，由用户决定是否重新登录
+                requireContext().toastError(e)
             }
         }
         buildMenu()
@@ -536,7 +540,7 @@ class MineFragment : Fragment() {
                         if (resp.isSuccess) {
                             resp.data?.let { r ->
                                 if (r.accessToken != null && r.user != null) {
-                                    AuthManager.saveLogin(r.accessToken, r.user, r.refreshToken)
+                                    AuthManager.saveLogin(r.accessToken, r.user, r.refreshToken, r.expiresAtMillis())
                                 }
                             }
                             ctx.toastLong("密码已修改")

@@ -55,11 +55,14 @@
         <activity
             android:name=".ui.player.PlayerActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
-            android:launchMode="singleTop" />
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
 
+        <!-- stateAlwaysHidden：评论框会抢首帧焦点，不加这项进页就自动弹输入法（与播放页同源问题） -->
         <activity
             android:name=".ui.article.ArticleActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
 
         <activity android:name=".ui.search.SearchActivity"
             android:windowSoftInputMode="adjustResize" />

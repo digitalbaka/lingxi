@@ -20,6 +20,10 @@ object AuthManager {
     private const val KEY_NODE_NAME = "node_name"
     private const val KEY_DEVICE_ID = "device_id"
     private const val KEY_NODE_GRANTED_IP = "node_granted_ip"
+    private const val KEY_EXPIRES_AT = "expires_at"
+
+    /** 提前续期窗口：accessToken 到期前 60 秒开始续期 */
+    private const val ACCESS_TOKEN_SKEW_MS = 60_000L
 
     private val prefs: SharedPreferences by lazy {
         LingXiApp.get().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -87,25 +91,37 @@ object AuthManager {
 
     val isAdmin: Boolean get() = isLoggedIn && (user?.id ?: 0L) in ADMIN_UIDS
 
-    fun getPlaybackBaseUrl(): String {
-        val url = nodeUrl
-        return if (url.isNullOrEmpty()) ApiClient.BASE_URL else url.trimEnd('/')
+    /**
+     * accessToken 过期时间（毫秒 epoch）。null 表示未知 —— 此时退化为「被动 401 续期」，
+     * 不做过期推断，也绝不清会话。
+     */
+    var expiresAt: Long?
+        get() = prefs.getLong(KEY_EXPIRES_AT, 0L).takeIf { it > 0L }
+        set(value) {
+            if (value == null || value <= 0L) prefs.edit().remove(KEY_EXPIRES_AT).apply()
+            else prefs.edit().putLong(KEY_EXPIRES_AT, value).apply()
+        }
+
+    /** 是否已进入提前续期窗口（默认提前 60 秒）；过期时间未知时返回 false，走 401 兜底 */
+    fun isExpiringSoon(skewMs: Long = ACCESS_TOKEN_SKEW_MS, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val at = expiresAt ?: return false
+        return nowMs >= at - skewMs
     }
 
-    fun saveLogin(newToken: String, newUser: User, newRefreshToken: String? = null) {
+    fun saveLogin(
+        newToken: String,
+        newUser: User,
+        newRefreshToken: String? = null,
+        expiresAtMs: Long? = null
+    ) {
         token = newToken
-        refreshToken = newRefreshToken
+        // refresh 是轮换令牌，且并非每个登录/改密响应都会返回它；
+        // 传 null 时保留已有值，否则会把可用的续期凭证抹掉，下一次 401 就只能重登
+        if (!newRefreshToken.isNullOrBlank()) refreshToken = newRefreshToken
         user = newUser
+        // 过期时间随 accessToken 一起更新；响应没给就置空，避免拿着旧时间戳误触发续期
+        expiresAt = expiresAtMs
     }
 
     fun logout() = prefs.edit().clear().apply()
-
-    /** 仅清空登录态（保留节点选择），用于令牌过期无法续期时 */
-    fun clearSession() {
-        prefs.edit()
-            .remove(KEY_TOKEN)
-            .remove(KEY_REFRESH_TOKEN)
-            .remove(KEY_USER)
-            .apply()
-    }
 }

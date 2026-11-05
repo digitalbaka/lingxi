@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
@@ -17,6 +19,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -115,6 +118,13 @@ class PlayerActivity : AppCompatActivity() {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 首帧把焦点收回根容器：否则框架会把焦点自动给第一个可聚焦控件（弹幕输入框），
+        // 导致一进播放页就弹出输入法
+        binding.root.post {
+            binding.root.requestFocus()
+            hideKeyboard()
+        }
+
         videoId = intent.getLongExtra(Navigator.EXTRA_VIDEO_ID, 0)
         if (videoId <= 0) {
             toast("视频不存在")
@@ -174,6 +184,10 @@ class PlayerActivity : AppCompatActivity() {
         releasePlayer()
         binding.danmakuView.setDanmaku(emptyList())
         binding.loadingBar.visible = true
+        // 关注状态要等详情接口返回才知道（detail.following），
+        // 未拿到前不摆出 XML 默认的「关注」，避免已关注用户看到可点的「关注」
+        following = false
+        binding.btnFollow.visible = false
 
         lifecycleScope.launch {
             try {
@@ -218,12 +232,18 @@ class PlayerActivity : AppCompatActivity() {
         return (map["progressMs"] as? Number)?.toLong() ?: 0
     }
 
-    private fun bindDetail(v: Video, followingUp: Boolean) {
-        binding.tvTitle.text = v.title
-        binding.tvTopTitle.text = v.title
+    /** 单独重绘 meta 行（播放量 / 弹幕数 / 日期），供弹幕发送后局部刷新用，不碰播放器 */
+    private fun renderMeta() {
+        val v = video ?: return
         val date = FormatUtils.formatDate(if (v.publishedAt > 0) v.publishedAt else v.createdAt)
         binding.tvMeta.text = "${FormatUtils.formatCount(v.viewCount)} 播放 · " +
             "${FormatUtils.formatCount(v.danmakuCount)} 弹幕 · $date"
+    }
+
+    private fun bindDetail(v: Video, followingUp: Boolean) {
+        binding.tvTitle.text = v.title
+        binding.tvTopTitle.text = v.title
+        renderMeta()
 
         following = followingUp
         val upUid = v.up?.id ?: v.uid
@@ -369,6 +389,9 @@ class PlayerActivity : AppCompatActivity() {
                 hideKeyboard()
                 // 发送成功立即上屏
                 binding.danmakuView.appendLive(Danmaku(content = content, timeMs = pos, mode = Danmaku.MODE_SCROLL))
+                // 本地 +1 并只重绘 meta：不重新拉详情，避免重建播放器/重置进度
+                video = video?.copy(danmakuCount = (video?.danmakuCount ?: 0) + 1)
+                renderMeta()
             } catch (e: Exception) {
                 toast("发送失败：${e.message}")
             }
@@ -564,8 +587,26 @@ class PlayerActivity : AppCompatActivity() {
         // 全屏时在顶栏提供清晰度切换入口（竖屏入口在简介区）
         binding.btnQualityFs.visible = fullscreen && (video?.qualityOptions?.size ?: 0) > 1
         WindowCompat.getInsetsController(window, window.decorView).apply {
+            // 点画面唤出媒体控制栏时，系统栏不应被普通点击唤回：
+            // 否则顶栏整体下移 50px（状态栏高度），「全屏/退出」按钮的点击位置发生偏移
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())
             else show(WindowInsetsCompat.Type.systemBars())
+        }
+        // API 30 以下（G5500 为 Android 6）上面的 systemBarsBehavior 未必落到旧标志位上，
+        // 这里再显式写一次沉浸式粘性标志（放在 compat 调用之后，保证是最终生效值）
+        if (Build.VERSION.SDK_INT < 30) {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (fullscreen) {
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            } else {
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            }
         }
     }
 
@@ -580,7 +621,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun hideKeyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(binding.etDanmaku.windowToken, 0)
+        // 用根容器的 windowToken：etDanmaku 未必已获得焦点，token 可能为空导致收起失败
+        imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
     }
 
     // ==================== 生命周期 ====================

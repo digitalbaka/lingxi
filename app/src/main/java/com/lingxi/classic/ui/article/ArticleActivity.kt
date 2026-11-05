@@ -1,8 +1,10 @@
 package com.lingxi.classic.ui.article
 
+import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -81,6 +83,13 @@ class ArticleActivity : AppCompatActivity() {
         binding = ActivityArticleBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 首帧把焦点收回根容器：否则框架会把焦点自动给第一个可聚焦控件（评论输入框），
+        // 即使 stateAlwaysHidden 让键盘不弹，mServedView 仍会停在 etComment
+        binding.root.post {
+            binding.root.requestFocus()
+            hideKeyboard()
+        }
+
         videoId = intent.getLongExtra(Navigator.EXTRA_VIDEO_ID, 0)
         if (videoId <= 0) {
             toast("内容不存在")
@@ -114,6 +123,9 @@ class ArticleActivity : AppCompatActivity() {
     }
 
     private fun loadDetail(id: Long) {
+        // 关注状态由详情接口的 following 决定，拿到前不显示 XML 默认的「关注」
+        following = false
+        binding.btnFollow.visible = false
         lifecycleScope.launch {
             try {
                 val detail = ApiClient.apiService.getVideoDetail(id).unwrap(this@ArticleActivity)
@@ -359,5 +371,11 @@ class ArticleActivity : AppCompatActivity() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         releaseAudio()
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        // 用根容器的 windowToken：评论框未必已获焦，token 可能为空导致收起失败
+        imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
     }
 }

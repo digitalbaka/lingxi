@@ -243,9 +243,6 @@ interface ApiService {
     @POST("/api/v1/auth/verify-2fa")
     suspend fun verify2fa(@Body body: Verify2faRequest): ApiResponse<LoginResult>
 
-    @POST("/api/v1/auth/refresh")
-    suspend fun refreshToken(): ApiResponse<LoginResult>
-
     @POST("/api/v1/auth/logout")
     suspend fun logout(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
 

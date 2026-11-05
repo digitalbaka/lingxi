@@ -9,6 +9,7 @@ import com.lingxi.classic.data.auth.AuthManager
 import com.lingxi.classic.data.model.Captcha
 import com.lingxi.classic.data.model.RegisterRequest
 import com.lingxi.classic.data.model.SendCodeRequest
+import com.lingxi.classic.data.model.expiresAtMillis
 import com.lingxi.classic.databinding.ActivityRegisterBinding
 import com.lingxi.classic.util.toast
 import kotlinx.coroutines.launch
@@ -127,7 +128,7 @@ class RegisterActivity : AppCompatActivity() {
                 val result = resp.data
                 if (resp.isSuccess) {
                     if (result?.accessToken != null && result.user != null) {
-                        AuthManager.saveLogin(result.accessToken, result.user, result.refreshToken)
+                        AuthManager.saveLogin(result.accessToken, result.user, result.refreshToken, result.expiresAtMillis())
                     }
                     toast("注册成功，欢迎来到凌汐")
                     finish()
