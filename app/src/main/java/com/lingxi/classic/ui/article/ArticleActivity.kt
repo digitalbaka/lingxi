@@ -128,6 +128,9 @@ class ArticleActivity : AppCompatActivity() {
     }
 
     private fun loadDetail(id: Long) {
+        // 关注状态由详情接口的 following 决定，拿到前不显示 XML 默认的「关注」
+        following = false
+        binding.btnFollow.visible = false
         lifecycleScope.launch {
             try {
                 val detail = ApiClient.apiService.getVideoDetail(id).unwrap(this@ArticleActivity)

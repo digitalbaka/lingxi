@@ -77,6 +77,12 @@ class MainActivity : AppCompatActivity() {
 
     // ==================== presence 轮询 ====================
 
+    override fun onResume() {
+        super.onResume()
+        // 启动/回到前台时检查一次令牌是否临期，需要就在后台预热续期（阻塞 0，失败不清会话）
+        ApiClient.warmUpSessionIfNeeded()
+    }
+
     override fun onStart() {
         super.onStart()
         startPresence()

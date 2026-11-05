@@ -13,6 +13,7 @@ import com.lingxi.classic.data.model.Captcha
 import com.lingxi.classic.data.model.LoginRequest
 import com.lingxi.classic.data.model.SendCodeRequest
 import com.lingxi.classic.data.model.Verify2faRequest
+import com.lingxi.classic.data.model.expiresAtMillis
 import com.lingxi.classic.databinding.ActivityLoginBinding
 import com.lingxi.classic.util.centerContentOnTablet
 import com.lingxi.classic.util.toast
@@ -115,7 +116,7 @@ class LoginActivity : AppCompatActivity() {
                         refreshCaptchaIfShown()
                     }
                     result.accessToken != null && result.user != null -> {
-                        AuthManager.saveLogin(result.accessToken, result.user, result.refreshToken)
+                        AuthManager.saveLogin(result.accessToken, result.user, result.refreshToken, result.expiresAtMillis())
                         toast("欢迎回来，${result.user.nickname.ifBlank { result.user.username }}")
                         finish()
                     }

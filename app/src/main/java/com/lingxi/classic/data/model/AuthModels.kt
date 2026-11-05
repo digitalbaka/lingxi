@@ -21,8 +21,42 @@ data class LoginResult(
     val mfaRequired: Boolean = false,
     val mfaTicket: String? = null,
     val emailMasked: String? = null,
-    val canUseRecovery: Boolean = false
+    val canUseRecovery: Boolean = false,
+    // 过期时间字段名/单位未取证：用 JsonElement 接收任意形态，避免类型不符让整段响应解析失败
+    val expiresAt: com.google.gson.JsonElement? = null,
+    val expireTime: com.google.gson.JsonElement? = null,
+    val expiresIn: com.google.gson.JsonElement? = null
 )
+
+/**
+ * 解析 accessToken 过期时间（毫秒 epoch），返回 null 表示无法判定，调用方退回被动 401 续期。
+ *
+ * 依据：官方客户端（D:\lingximobile/lib/arm64-v8a/libapp.so）Dart AOT 字符串池里
+ * `refreshToken`(偏移 695600) 与 `expiresAt`(偏移 695621) 紧邻，且存在 `TokenPair.fromJson`，
+ * 判定 TokenPair 的序列化字段名为 refreshToken / expiresAt。单位无证据（无 `expires_in`、
+ * 无 `toIso8601String`），故按数值量级容错：
+ *  - 绝对时间：> 1e12 视为毫秒；1e9 ~ 1e12 视为秒（×1000）
+ *  - 其余正数：视为「相对秒」（从现在起算）
+ *  - `expiresIn` 优先按相对秒；若数值 > 1e9 则按绝对秒处理（服务端误给时间戳时兜底）
+ * 字符串形态只有纯数字才会被采用；ISO 8601 不在本轮依据范围内，不猜。
+ */
+fun LoginResult.expiresAtMillis(nowMs: Long = System.currentTimeMillis()): Long? {
+    fun com.google.gson.JsonElement?.asLongOrNull(): Long? {
+        if (this == null || isJsonNull || !isJsonPrimitive) return null
+        return asJsonPrimitive.asString.toLongOrNull()
+    }
+    val abs = expiresAt.asLongOrNull() ?: expireTime.asLongOrNull()
+    if (abs != null) {
+        if (abs <= 0L) return null
+        return when {
+            abs > 1_000_000_000_000L -> abs
+            abs > 1_000_000_000L -> abs * 1000L
+            else -> nowMs + abs * 1000L
+        }
+    }
+    val rel = expiresIn.asLongOrNull()?.takeIf { it > 0L } ?: return null
+    return if (rel > 1_000_000_000L) rel * 1000L else nowMs + rel * 1000L
+}
 
 /** 发送邮箱验证码：purpose=login 时只需 ticket；register/bind 时只需 email。null 字段不序列化（避免空串触发 400） */
 data class SendCodeRequest(

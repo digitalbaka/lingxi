@@ -37,6 +37,19 @@ fun Context.gridSpanCount(): Int = resources.getInteger(com.lingxi.classic.R.int
 fun Context.isTablet(): Boolean = resources.configuration.smallestScreenWidthDp >= 600
 
 /**
+ * 统一错误文案：沿用现有异常类型（Retrofit 抛 HttpException、OkHttp 抛 IOException），
+ * 不再单独造错误码体系。401 → 登录态过期；5xx → 服务器暂时不可用；其余 → 网络异常。
+ */
+fun Throwable.errorMessageRes(): Int = when {
+    this is retrofit2.HttpException && code() == 401 -> com.lingxi.classic.R.string.err_login_expired
+    this is retrofit2.HttpException && code() in 500..599 -> com.lingxi.classic.R.string.err_server_unavailable
+    else -> com.lingxi.classic.R.string.err_network
+}
+
+/** 按异常类型给出可读提示（只提示，不清理会话） */
+fun Context.toastError(error: Throwable) = toast(getString(error.errorMessageRes()))
+
+/**
  * 平板上把内容列限制在最大宽度并水平居中。
  * 手机（sw<600dp）不做任何处理，保持原有全宽布局；平板横竖屏、分屏均按当前宽度取较小值。
  */

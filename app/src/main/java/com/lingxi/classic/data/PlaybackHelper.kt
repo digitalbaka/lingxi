@@ -40,7 +40,8 @@ object PlaybackHelper {
     /** 确保直连节点已授权（handoff）。返回 true 表示可用 */
     suspend fun ensureNodeGranted(): Boolean {
         if (!usingDirectNode()) return true
-        if (!AuthManager.isLoggedIn) return true // 未登录走主站即可
+        // 未登录拿不到节点授权，此时回落主站，不要用一个无授权的节点地址去播
+        if (!AuthManager.isLoggedIn) return false
         return try {
             val resp = ApiClient.apiService.handoff(com.lingxi.classic.data.model.HandoffRequest(AuthManager.nodeId))
             if (resp.isSuccess) {
@@ -58,7 +59,10 @@ object PlaybackHelper {
 
     /** 生成最终播放源（含节点拼接 + X-Forwarded-For 头） */
     suspend fun buildPlaySource(context: Context, video: Video, qualityUrl: String? = null): PlaySource {
-        val base = AuthManager.getPlaybackBaseUrl()
+        // 节点授权失败（换了 IP / 授权过期）就回落主站：
+        // 节点只影响请求地址，不能把节点侧故障放大成播放失败，更不能因此动账号会话
+        val direct = usingDirectNode() && ensureNodeGranted()
+        val base = if (direct) AuthManager.nodeUrl!!.trimEnd('/') else ApiClient.BASE_URL
         var url = joinUrl(base, qualityUrl ?: video.src)
 
         // 大会员媒体票据（App 无法用 Cookie 时拼参数）
@@ -72,13 +76,12 @@ object PlaybackHelper {
         }
 
         val headers = mutableMapOf<String, String>()
-        if (usingDirectNode()) {
-            ensureNodeGranted()
+        if (direct) {
             AuthManager.nodeGrantedIp?.let { headers["X-Forwarded-For"] = it }
         }
         // 切地址后先清掉可能存在的毒缓存
         VideoCacheManager.evict(context, url)
-        return PlaySource(url, headers, usingDirectNode(), AuthManager.nodeName ?: "主站")
+        return PlaySource(url, headers, direct, if (direct) AuthManager.nodeName ?: "主站" else "主站")
     }
 
     /** 播放失败（可能 40301 毒缓存）后的恢复：清缓存 + 重新授权。返回是否应重试 */
