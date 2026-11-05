@@ -49,6 +49,10 @@ class HomeFragment : Fragment() {
     private var pinnedMerged = false
     /** 刷新代次：后补任务落地时校验，丢弃过期的补齐结果 */
     private var refreshGeneration = 0
+    /** 本代推荐已 submit 的代次；置顶早于推荐到达时靠它判断该缓存还是直接合并 */
+    private var recommendSubmittedGen = 0
+    /** 置顶先于推荐到达时的缓存（仅当前代有效），推荐 submit 后立即合并 */
+    private var pendingPinned: List<Video>? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
@@ -115,6 +119,8 @@ class HomeFragment : Fragment() {
         loading = true
         page = 1
         pinnedMerged = false
+        // 新代开始：上一代没等到的置顶缓存直接丢弃
+        pendingPinned = null
         val gen = ++refreshGeneration
         binding.swipeRefresh.isRefreshing = true
         viewLifecycleOwner.lifecycleScope.launch {
@@ -138,6 +144,10 @@ class HomeFragment : Fragment() {
                 if (gen != refreshGeneration) return@launch
 
                 adapter.submit(recommend.items)
+                // 推荐已落定：置顶若先到就先缓存，此刻必须立刻合并（同一帧，避免出现
+                // 「置顶先进旧列表 → 推荐整表替换把置顶冲掉」或「置顶晚到再合进新列表」两种错位）
+                recommendSubmittedGen = gen
+                mergePendingPinned(gen)
                 hasMore = recommend.hasMore
                 loadMoreListener.reset()
                 loadMoreListener.hasMore = hasMore
@@ -167,7 +177,15 @@ class HomeFragment : Fragment() {
             val ads = adsDeferred.await()?.unwrap()?.items.orEmpty()
             if (gen != refreshGeneration) return@launch
             updateBanner(ads, pinned)
-            applyPinned(pinned)
+            if (pinned.isNotEmpty()) {
+                if (recommendSubmittedGen == gen) {
+                    // 推荐已落定：直接合进当前列表
+                    applyPinned(pinned, gen)
+                } else {
+                    // 置顶先到：先缓存，等本代推荐 submit 后再合并，绝不改旧列表
+                    pendingPinned = pinned
+                }
+            }
         }
     }
 
@@ -189,13 +207,18 @@ class HomeFragment : Fragment() {
     }
 
     private fun fillOnePageIfNeeded(gen: Int, filled: Int) {
-        if (gen != refreshGeneration || !hasMore || loading) return
-        if (adapter.getItems().isEmpty()) return
         val lm = gridLayoutManager
         val lastVisible = lm.findLastVisibleItemPosition()
+        val count = adapter.itemCount
+        // 可观测性：区分「跑了但跳过」与「根本没跑」（没跑时不会有 check 行）
+        Log.d(TAG, "home_autofill check gen=$gen filled=$filled lastVisible=$lastVisible count=$count hasMore=$hasMore loading=$loading")
+        if (gen != refreshGeneration) return logFillSkip(gen, "staleGen", lastVisible, count)
+        if (!hasMore) return logFillSkip(gen, "noMore", lastVisible, count)
+        if (loading) return logFillSkip(gen, "loading", lastVisible, count)
+        if (adapter.getItems().isEmpty()) return logFillSkip(gen, "empty", lastVisible, count)
         // 列表尾项已可见 ⇒ 内容铺不满（或刚好到屏幕底），没有可滚动空间
-        if (lastVisible < adapter.itemCount - 1) return
-        Log.i(TAG, "home_autofill start gen=$gen next=${page + 1} lastVisible=$lastVisible count=${adapter.itemCount}")
+        if (lastVisible < count - 1) return logFillSkip(gen, "notAtEnd", lastVisible, count)
+        Log.i(TAG, "home_autofill start gen=$gen next=${page + 1} lastVisible=$lastVisible count=$count")
         loading = true
         viewLifecycleOwner.lifecycleScope.launch {
             var got = 0
@@ -224,15 +247,28 @@ class HomeFragment : Fragment() {
         }
     }
 
+    /** 补页跳过原因（debug 级：每次刷新最多一两行，长期保留不占 info 日志） */
+    private fun logFillSkip(gen: Int, reason: String, lastVisible: Int, count: Int) {
+        Log.d(TAG, "home_autofill skip reason=$reason gen=$gen lastVisible=$lastVisible count=$count hasMore=$hasMore")
+    }
+
+    /** 推荐 submit 后立刻检查：置顶若已提前到达就合并，否则留给 aux 协程直接合并 */
+    private fun mergePendingPinned(gen: Int) {
+        val pinned = pendingPinned ?: return
+        pendingPinned = null
+        applyPinned(pinned, gen)
+    }
+
     /**
      * 置顶卡后补（列表已由推荐渲染落定后才调用）。
      * - 用户已滚入列表：按「原首个可见项」回滚到新索引，避免内容被顶走；
      * - 仍停在顶部（含 banner 头部）：回到 position 0，按最终顺序「banner → 置顶 → 推荐」呈现，
      *   推荐卡一次性整体下移，这是置顶插入的固有语义，不产生错位的滚动状态。
+     * - 合并前先剔除列表里已有的置顶项，保证同一条置顶不会出现两次。
      */
-    private fun applyPinned(pinned: List<Video>) {
-        if (pinned.isEmpty() || pinnedMerged) return
-        val current = adapter.getItems().toList()
+    private fun applyPinned(pinned: List<Video>, gen: Int) {
+        if (gen != refreshGeneration || pinned.isEmpty() || pinnedMerged) return
+        val current = adapter.getItems().filterNot { it.pinned }
         // 推荐失败/为空时列表不该只剩置顶，交给 tvEmpty 重试或下拉刷新
         if (current.isEmpty()) return
         pinnedMerged = true
