@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/lx_green_light" />
-    <corners android:radius="10dp" />
-    <padding android:left="8dp" android:top="3dp" android:right="8dp" android:bottom="3dp" />
+    <solid android:color="@color/tag_bg" />
+    <corners android:radius="@dimen/radius_pill" />
+    <padding
+        android:bottom="3dp"
+        android:left="9dp"
+        android:right="9dp"
+        android:top="3dp" />
 </shape>

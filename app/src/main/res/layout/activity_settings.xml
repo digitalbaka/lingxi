@@ -131,6 +131,37 @@
                         android:textColor="@color/lx_text_sub"
                         android:textSize="13sp" />
                 </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="14dp"
+                    android:background="@color/lx_divider" />
+
+                <LinearLayout
+                    android:id="@+id/rowButtonSize"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="13dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="按钮大小"
+                        android:textColor="@color/lx_text"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/tvButtonSize"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/lx_text_sub"
+                        android:textSize="13sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView

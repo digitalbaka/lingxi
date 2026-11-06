@@ -3,19 +3,27 @@ package com.lingxi.classic.ui.player
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -31,6 +39,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.lingxi.classic.R
 import com.lingxi.classic.data.PlaybackHelper
 import com.lingxi.classic.data.api.ApiClient
 import com.lingxi.classic.data.auth.AuthManager
@@ -38,11 +47,13 @@ import com.lingxi.classic.data.model.Danmaku
 import com.lingxi.classic.data.model.DanmakuSendRequest
 import com.lingxi.classic.data.model.HistoryReportRequest
 import com.lingxi.classic.data.model.Video
+import com.lingxi.classic.data.model.VideoQuality
 import com.lingxi.classic.data.model.ViewReportRequest
 import com.lingxi.classic.data.model.displayName
 import com.lingxi.classic.databinding.ActivityPlayerBinding
 import com.lingxi.classic.databinding.DialogDanmakuSettingsBinding
 import com.lingxi.classic.databinding.ItemPlayerRelatedBinding
+import com.lingxi.classic.player.ButtonSizeSettings
 import com.lingxi.classic.player.DanmakuSettings
 import com.lingxi.classic.player.VideoCacheManager
 import com.lingxi.classic.ui.common.CommentsController
@@ -59,14 +70,34 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * 视频播放页（kind=video）。
- * 手机：16:9 播放器 + 弹幕输入条 + NestedScrollView（信息/相关推荐/评论）；横屏为全屏。
- * 平板横屏：左列 16:9 播放器（限高）+ 右列弹幕/信息双列（参考哔哩哔哩 HD）；全屏时右列隐藏。
- * 平板竖屏：仍按单列（播放器在上、信息在下），不改变手机端与平板竖屏的既有外观。
+ * 竖屏：16:9 播放器 + 弹幕输入条 + NestedScrollView（信息/相关推荐/评论）。
+ * 横屏全屏：隐藏滚动区并沉浸式。
  */
 class PlayerActivity : AppCompatActivity() {
+
+    private companion object {
+        /** 首帧超时阈值：超过该时长仍无画面即视为当前清晰度不可播 */
+        const val FIRST_FRAME_TIMEOUT_MS = 10_000L
+
+        // ---- 触屏手势 ----
+        const val GESTURE_NONE = 0
+        const val GESTURE_VERTICAL = 1
+        const val GESTURE_HORIZONTAL = 2
+        /** 方向锁阈值（dp）：位移超过它才锁定方向，避免误触 */
+        const val GESTURE_SLOP_DP = 24f
+        /** 横滑满宽对应的进度跨度上限（秒） */
+        const val SEEK_FULL_WIDTH_SEC = 120
+        /** 竖滑满量程所需的高度比例：70% 播放区高度 ≈ 亮度 0→100% / 音量 0→最大 */
+        const val VERTICAL_RANGE_RATIO = 0.7f
+        /** 控制条底部区域高度（dp）：该区域不接管手势，保留按钮点击 */
+        const val CONTROLS_GUARD_DP = 72
+    }
 
     private lateinit var binding: ActivityPlayerBinding
 
@@ -82,6 +113,32 @@ class PlayerActivity : AppCompatActivity() {
     private var isFullscreen = false
     /** 平板上全屏只是布局状态，不绑定横竖屏（平板横屏打开视频不应被强制全屏） */
     private var tabletFullscreen = false
+
+    // ---- 清晰度自动降档（站点部分高码率/4K 无法编码，客户端不黑屏干等）----
+    /** 本次播放是否已经出过画面；未出画面且超时则视为失败 */
+    private var firstFrameRendered = false
+    /** 本视频已尝试失败的清晰度 URL，防止同一档反复重试 */
+    private val failedQualityUrls = mutableSetOf<String>()
+    /** 本视频已提示过的降档目标，避免同一提示反复弹 */
+    private val notifiedDowngradeTargets = mutableSetOf<String>()
+
+    // ---- 触屏手势（左亮度 / 右音量 / 横滑松手 seek）----
+    private lateinit var audioManager: AudioManager
+    /** 进入页面时的亮度覆盖值，-1=跟随系统；离开页面恢复 */
+    private var originalBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+    private var gestureMode = GESTURE_NONE
+    private var gestureStartX = 0f
+    private var gestureStartY = 0f
+    private var gestureOnLeftSide = false
+    private var startBrightness = 0.5f
+    private var startVolume = 0
+    private var startPositionMs = 0L
+    private var previewPositionMs = 0L
+    private lateinit var gestureOverlay: LinearLayout
+    private lateinit var gestureLabel: TextView
+    private lateinit var gestureBar: ProgressBar
+
+    private val hideGestureOverlay = Runnable { gestureOverlay.visibility = View.GONE }
 
     private var viewReported = false
     private var viewReportJob: Job? = null
@@ -110,9 +167,22 @@ class PlayerActivity : AppCompatActivity() {
             binding.loadingBar.visible = state == Player.STATE_BUFFERING
         }
 
+        override fun onRenderedFirstFrame() {
+            firstFrameRendered = true
+            handler.removeCallbacks(firstFrameWatchdog)
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             onPlayError(error)
         }
+    }
+
+    /** 首帧看门狗：一直没画面（黑屏/解码失败/长时间无首帧）也按播放失败处理，触发降档 */
+    private val firstFrameWatchdog = Runnable {
+        val p = player ?: return@Runnable
+        if (firstFrameRendered || !p.playWhenReady) return@Runnable
+        if (p.playbackState == Player.STATE_ENDED) return@Runnable
+        onQualityUnplayable(null)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -145,10 +215,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        // 进页不抢焦点：焦点先落在根容器，键盘只在用户主动点弹幕输入框时出现
-        binding.rootLayout.requestFocus()
-        binding.rootLayout.post { hideKeyboard() }
-
         binding.btnBack.setOnClickListener { onBack() }
         binding.btnFullscreen.setOnClickListener { toggleFullscreen() }
         binding.btnQualityFs.setOnClickListener {
@@ -177,6 +243,16 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         interactionBar = InteractionBar(this, binding.interactionBar.root)
+        setupGestureOverlay()
+        setupGestures()
+        applyControlButtonSize()
+    }
+
+    /** 读一次设置并应用到控制条按钮；改档后回到播放页即生效，无需重启 */
+    private fun applyControlButtonSize() {
+        ButtonSizeSettings.applyTouchTarget(binding.btnBack)
+        ButtonSizeSettings.applyLabelButton(binding.btnQualityFs)
+        ButtonSizeSettings.applyLabelButton(binding.btnFullscreen)
     }
 
     // ==================== 加载与绑定 ====================
@@ -188,10 +264,14 @@ class PlayerActivity : AppCompatActivity() {
         retriedAfterRecover = false
         currentQualityUrl = null
         resumePosition = 0
+        firstFrameRendered = false
+        failedQualityUrls.clear()
+        notifiedDowngradeTargets.clear()
         releasePlayer()
         binding.danmakuView.setDanmaku(emptyList())
         binding.loadingBar.visible = true
-        // 关注状态由详情接口的 following 决定，拿到前不显示 XML 默认的「关注」
+        // 关注状态要等详情接口返回才知道（detail.following），
+        // 未拿到前不摆出 XML 默认的「关注」，避免已关注用户看到可点的「关注」
         following = false
         binding.btnFollow.visible = false
 
@@ -322,6 +402,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun startPlayback(v: Video, resumeMs: Long = 0) {
         releasePlayer()
+        firstFrameRendered = false
         lifecycleScope.launch {
             try {
                 val ps = PlaybackHelper.buildPlaySource(this@PlayerActivity, v, currentQualityUrl)
@@ -348,6 +429,10 @@ class PlayerActivity : AppCompatActivity() {
                 p.addListener(playerListener)
                 player = p
 
+                // 首帧看门狗：默认/高清晰度若根本编不出可播的画面，10 秒内没首帧就自动降档
+                handler.removeCallbacks(firstFrameWatchdog)
+                handler.postDelayed(firstFrameWatchdog, FIRST_FRAME_TIMEOUT_MS)
+
                 if (resumeMs > 0) {
                     binding.danmakuView.seekTo(resumeMs)
                     toast("上次看到 ${FormatUtils.formatDurationMs(resumeMs)}")
@@ -360,9 +445,10 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** 播放失败：清毒缓存 + 重新节点授权后重试一次，仍失败则报错 */
+    /** 播放失败：先清毒缓存 + 重新节点授权重试一次（节点问题换档没用），仍失败则自动降档；降无可降才报错 */
     private fun onPlayError(error: PlaybackException) {
         binding.loadingBar.visible = false
+        handler.removeCallbacks(firstFrameWatchdog)
         val url = playUrl
         if (!retriedAfterRecover) {
             retriedAfterRecover = true
@@ -377,15 +463,246 @@ class PlayerActivity : AppCompatActivity() {
                     toast("节点连接失败，正在重新授权…")
                     video?.let { startPlayback(it, pos) }
                 } else {
-                    toast("播放失败：${error.localizedMessage ?: "未知错误"}")
+                    onQualityUnplayable(error)
                 }
             }
         } else {
-            toast("播放失败：${error.localizedMessage ?: "未知错误"}")
+            onQualityUnplayable(error)
         }
     }
 
+    // ==================== 清晰度自动降档 ====================
+
+    /** 清晰度阶梯：默认档（video.src）视作最高档，其余按 height 从高到低；同 URL 只保留一条 */
+    private fun qualityLadder(): List<VideoQuality> {
+        val v = video ?: return emptyList()
+        val options = v.qualityOptions.filter { it.url.isNotBlank() }
+        val srcMatch = options.firstOrNull { it.url == v.src }
+        val head = srcMatch ?: VideoQuality(
+            label = v.qualityLabel.ifBlank { "默认" },
+            height = v.height,
+            fps = v.fps,
+            url = v.src
+        )
+        if (head.url.isBlank()) return options.sortedByDescending { it.height }
+        val rest = options.filter { it.url != head.url }.sortedByDescending { it.height }
+        return listOf(head) + rest
+    }
+
+    private fun currentQualityIndex(ladder: List<VideoQuality>): Int {
+        val cur = currentQualityUrl ?: video?.src ?: return 0
+        val i = ladder.indexOfFirst { it.url == cur }
+        return if (i >= 0) i else 0
+    }
+
+    /**
+     * 当前清晰度播不出来（onPlayerError / 首帧超时）时调用：
+     * 按阶梯降一档重播，最多降到最低档，同一档不重复尝试、同一提示不重复弹。
+     * 位置在播放器重建时带入，用户无感。
+     */
+    private fun onQualityUnplayable(error: PlaybackException?) {
+        val v = video ?: return
+        val ladder = qualityLadder()
+        val curIdx = currentQualityIndex(ladder)
+        ladder.getOrNull(curIdx)?.let { failedQualityUrls.add(it.url) }
+
+        val nextIdx = (curIdx + 1 until ladder.size).firstOrNull { ladder[it].url !in failedQualityUrls }
+        if (nextIdx == null) {
+            toast("播放失败：${error?.localizedMessage ?: "当前清晰度均无法播放"}")
+            return
+        }
+        val next = ladder[nextIdx]
+        val fromLabel = ladder.getOrNull(curIdx)?.label ?: "默认"
+        val pos = player?.currentPosition ?: 0
+
+        currentQualityUrl = next.url
+        binding.tvQuality.text = "清晰度：${next.label}"
+        startPlayback(v, pos)
+
+        if (notifiedDowngradeTargets.add(next.label)) {
+            toast("「$fromLabel」无法播放，已切换到「${next.label}」")
+        }
+    }
+
+    // ==================== 触屏手势 ====================
+
+    /** 浮层：纯色半透明底 + 一行文字 + 细进度条（不随手指每帧闪，统一 2 秒后自动消失） */
+    private fun setupGestureOverlay() {
+        gestureOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(ContextCompat.getColor(this@PlayerActivity, R.color.scrim_60))
+            }
+            visibility = View.GONE
+        }
+        gestureLabel = TextView(this).apply {
+            setTextColor(ContextCompat.getColor(this@PlayerActivity, R.color.white))
+            textSize = 13f
+            gravity = Gravity.CENTER
+        }
+        gestureBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progressTintList = ColorStateList.valueOf(ContextCompat.getColor(this@PlayerActivity, R.color.accent))
+            layoutParams = LinearLayout.LayoutParams(dp(180), dp(6)).apply { topMargin = dp(8) }
+        }
+        gestureOverlay.addView(gestureLabel)
+        gestureOverlay.addView(gestureBar)
+        binding.playerContainer.addView(
+            gestureOverlay,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        )
+    }
+
+    private fun setupGestures() {
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        originalBrightness = window.attributes.screenBrightness
+        // 挂在 PlayerView 上并始终返回 false：单击/双击继续交给默认控制条处理，
+        // 只有位移超过阈值后才由这里接手（控制条按钮自身会消费事件，天然不冲突）
+        binding.playerView.setOnTouchListener { _, ev -> handleGestureTouch(ev) }
+    }
+
+    private fun handleGestureTouch(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                gestureMode = GESTURE_NONE
+                // 顶栏（返回/标题/全屏）与底部系统控制条区域不接管手势
+                val topBar = binding.btnBack.parent as? View
+                if (topBar != null && ev.y < topBar.bottom) return false
+                if (binding.playerView.isControllerFullyVisible &&
+                    ev.y > binding.playerView.height - dp(CONTROLS_GUARD_DP)
+                ) return false
+                gestureStartX = ev.x
+                gestureStartY = ev.y
+            }
+            MotionEvent.ACTION_MOVE -> handleGestureMove(ev)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (gestureMode == GESTURE_HORIZONTAL && ev.actionMasked == MotionEvent.ACTION_UP) {
+                    commitHorizontalSeek()
+                }
+                gestureMode = GESTURE_NONE
+            }
+        }
+        return false
+    }
+
+    private fun handleGestureMove(ev: MotionEvent) {
+        val threshold = GESTURE_SLOP_DP * resources.displayMetrics.density
+        if (gestureMode == GESTURE_NONE) {
+            val dx = ev.x - gestureStartX
+            val dy = ev.y - gestureStartY
+            if (abs(dx) <= threshold && abs(dy) <= threshold) return
+            if (abs(dy) > abs(dx)) {
+                gestureMode = GESTURE_VERTICAL
+                gestureOnLeftSide = gestureStartX < binding.playerView.width / 2f
+                startBrightness = effectiveBrightness()
+                startVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                // 从锁定那一刻重新起算，避免阈值内的位移造成跳变
+                gestureStartY = ev.y
+            } else {
+                val dur = player?.duration ?: 0L
+                if (dur <= 0) return
+                gestureMode = GESTURE_HORIZONTAL
+                startPositionMs = (player?.currentPosition ?: 0L).coerceAtLeast(0)
+                previewPositionMs = startPositionMs
+                gestureStartX = ev.x
+            }
+        }
+        when (gestureMode) {
+            GESTURE_VERTICAL -> applyVerticalDelta(gestureStartY - ev.y)
+            GESTURE_HORIZONTAL -> previewHorizontalDelta(ev.x - gestureStartX)
+        }
+    }
+
+    /** 纵向：左半区调亮度、右半区调媒体音量，实时生效 */
+    private fun applyVerticalDelta(dy: Float) {
+        val height = binding.playerView.height.coerceAtLeast(1)
+        val ratio = dy / (height * VERTICAL_RANGE_RATIO)
+        if (gestureOnLeftSide) {
+            val value = (startBrightness + ratio).coerceIn(0f, 1f)
+            val lp = window.attributes
+            lp.screenBrightness = value
+            window.attributes = lp
+            val pct = (value * 100).roundToInt()
+            showGestureOverlay("亮度 $pct%", pct, 100)
+        } else {
+            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            val target = (startVolume + ratio * max).roundToInt().coerceIn(0, max)
+            if (target != audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)) {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+            }
+            val pct = target * 100 / max
+            showGestureOverlay("音量 $pct%", pct, 100)
+        }
+    }
+
+    /** 横向：只预览目标时间，松手才真正 seek */
+    private fun previewHorizontalDelta(dx: Float) {
+        val dur = player?.duration ?: 0L
+        if (dur <= 0) return
+        val width = binding.playerView.width.coerceAtLeast(1)
+        val spanSec = min(dur / 1000, SEEK_FULL_WIDTH_SEC.toLong())
+        val deltaMs = (dx / width * spanSec * 1000).toLong()
+        previewPositionMs = (startPositionMs + deltaMs).coerceIn(0, dur)
+        val sec = abs(deltaMs) / 1000
+        val arrow = if (deltaMs >= 0) "▶" else "◀"
+        val action = if (deltaMs >= 0) "快进" else "快退"
+        showGestureOverlay(
+            "$arrow $action ${sec}s  ${FormatUtils.formatDurationMs(previewPositionMs)} / ${FormatUtils.formatDurationMs(dur)}",
+            previewPositionMs.toInt(),
+            dur.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        )
+    }
+
+    private fun commitHorizontalSeek() {
+        val p = player ?: return
+        if (p.duration <= 0) return
+        val delta = previewPositionMs - startPositionMs
+        p.seekTo(previewPositionMs)
+        binding.danmakuView.seekTo(previewPositionMs)
+        val sec = abs(delta) / 1000
+        val action = if (delta >= 0) "▶ 快进" else "◀ 快退"
+        showGestureOverlay("$action ${sec}s", 100, 100)
+    }
+
+    /** 尚未设置覆盖值时用系统亮度作起点（只读，不申请 WRITE_SETTINGS） */
+    private fun effectiveBrightness(): Float {
+        val attr = window.attributes.screenBrightness
+        if (attr >= 0f) return attr
+        val sys = runCatching {
+            Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+        }.getOrDefault(128)
+        return (sys / 255f).coerceIn(0f, 1f)
+    }
+
+    private fun showGestureOverlay(label: String, progress: Int, max: Int) {
+        handler.removeCallbacks(hideGestureOverlay)
+        gestureOverlay.visibility = View.VISIBLE
+        gestureLabel.text = label
+        gestureBar.max = max.coerceAtLeast(1)
+        gestureBar.progress = progress.coerceIn(0, gestureBar.max)
+        handler.postDelayed(hideGestureOverlay, 2_000)
+    }
+
+    /** 离开页面把亮度还给系统（原值通常是 -1 跟随系统） */
+    private fun restoreBrightness() {
+        val lp = window.attributes
+        if (lp.screenBrightness != originalBrightness) {
+            lp.screenBrightness = originalBrightness
+            window.attributes = lp
+        }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
+
     private fun releasePlayer() {
+        handler.removeCallbacks(firstFrameWatchdog)
         binding.playerView.player = null
         player?.release()
         player = null
@@ -419,8 +736,9 @@ class PlayerActivity : AppCompatActivity() {
                     .unwrap(this@PlayerActivity) ?: return@launch
                 binding.etDanmaku.setText("")
                 hideKeyboard()
-                // 发送成功立即上屏，并只重绘 meta 的弹幕数（不重建播放器、不 seek）
+                // 发送成功立即上屏
                 binding.danmakuView.appendLive(Danmaku(content = content, timeMs = pos, mode = Danmaku.MODE_SCROLL))
+                // 本地 +1 并只重绘 meta：不重新拉详情，避免重建播放器/重置进度
                 video = video?.copy(danmakuCount = (video?.danmakuCount ?: 0) + 1)
                 renderMeta()
             } catch (e: Exception) {
@@ -713,6 +1031,12 @@ class PlayerActivity : AppCompatActivity() {
 
     // ==================== 生命周期 ====================
 
+    override fun onResume() {
+        super.onResume()
+        // 从设置页返回时重新读取按钮大小
+        applyControlButtonSize()
+    }
+
     override fun onStart() {
         super.onStart()
         val v = video
@@ -727,7 +1051,9 @@ class PlayerActivity : AppCompatActivity() {
         super.onStop()
         resumePosition = player?.currentPosition ?: 0
         handler.removeCallbacks(danmakuTicker)
+        handler.removeCallbacks(hideGestureOverlay)
         releasePlayer()
+        restoreBrightness()
         stopJobs()
     }
 

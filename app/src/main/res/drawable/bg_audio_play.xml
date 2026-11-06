@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <!-- 主按钮（音频播放键）：与全站主按钮同一渐变，保证白色图标可读 -->
+    <gradient
+        android:angle="315"
+        android:endColor="@color/brand_purple_deep"
+        android:startColor="@color/accent_pressed" />
+</shape>

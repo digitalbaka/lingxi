@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.lingxi.classic.BuildConfig
 import com.lingxi.classic.R
 import com.lingxi.classic.databinding.ActivitySettingsBinding
+import com.lingxi.classic.player.ButtonSizeSettings
 import com.lingxi.classic.player.DanmakuSettings
 import com.lingxi.classic.player.VideoCacheManager
 import com.lingxi.classic.util.FormatUtils
@@ -29,13 +30,16 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowCacheLimit.setOnClickListener { showCacheLimitDialog() }
         binding.rowClearCache.setOnClickListener { confirmClearCache() }
         binding.rowDanmaku.setOnClickListener { showDanmakuDialog() }
+        binding.rowButtonSize.setOnClickListener { showButtonSizeDialog() }
 
         binding.tvVersion.text = "v${BuildConfig.VERSION_NAME}"
+        binding.tvButtonSize.text = ButtonSizeSettings.label()
     }
 
     override fun onResume() {
         super.onResume()
         refreshCacheViews()
+        binding.tvButtonSize.text = ButtonSizeSettings.label()
     }
 
     private fun refreshCacheViews() {
@@ -72,6 +76,22 @@ class SettingsActivity : AppCompatActivity() {
                 refreshCacheViews()
                 toast("缓存已清理")
             }
+            .show()
+    }
+
+    // ==================== 按钮大小 ====================
+
+    private fun showButtonSizeDialog() {
+        val current = ButtonSizeSettings.level
+        AlertDialog.Builder(this)
+            .setTitle("播放页按钮大小")
+            .setSingleChoiceItems(ButtonSizeSettings.labels, current) { dialog, which ->
+                ButtonSizeSettings.level = which
+                binding.tvButtonSize.text = ButtonSizeSettings.label()
+                toast("按钮大小已设为「${ButtonSizeSettings.label()}」")
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
             .show()
     }
 

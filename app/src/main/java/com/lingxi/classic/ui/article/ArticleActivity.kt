@@ -62,6 +62,16 @@ class ArticleActivity : AppCompatActivity() {
     private var audioUrl = ""
     private var retriedAfterRecover = false
 
+    // 播放器设置：player 会被 onStop 释放，因此状态存在字段里，新建 player 后重新应用
+    private var repeatOne = false
+    private var playbackSpeed = 1.0f
+    private var audioVolume: Float? = null
+
+    companion object {
+        private const val SEEK_STEP_MS = 15_000L
+        private val SPEED_OPTIONS = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    }
+
     private var viewReported = false
     private var viewReportJob: Job? = null
     private var historyJob: Job? = null
@@ -103,6 +113,24 @@ class ArticleActivity : AppCompatActivity() {
         binding.articleRoot.post { hideKeyboard() }
         binding.btnBack.setOnClickListener { finish() }
         binding.btnPlayPause.setOnClickListener { toggleAudio() }
+        binding.btnRewind.setOnClickListener { seekBy(-SEEK_STEP_MS) }
+        binding.btnForward.setOnClickListener { seekBy(SEEK_STEP_MS) }
+        binding.btnRepeat.setOnClickListener { toggleRepeat() }
+        binding.btnSpeed.setOnClickListener { cycleSpeed() }
+        binding.seekVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                audioVolume = progress / 100f
+                audioPlayer?.volume = audioVolume ?: 1.0f
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        // 初始化音量滑块（fromUser=false，不会误写字段）
+        binding.seekVolume.progress = ((audioVolume ?: 1.0f) * 100).toInt()
+        renderRepeat()
+        renderSpeed()
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) audioPlayer?.let { p ->
@@ -232,6 +260,65 @@ class ArticleActivity : AppCompatActivity() {
         else p.play()
     }
 
+    /** 快进/快退：裁剪到 [0, duration]，未就绪（duration<=0）直接忽略 */
+    private fun seekBy(deltaMs: Long) {
+        val p = audioPlayer ?: return
+        val dur = p.duration
+        if (dur <= 0) return
+        val target = (p.currentPosition + deltaMs).coerceIn(0L, dur)
+        if (target == p.currentPosition) return
+        p.seekTo(target)
+        binding.seekBar.progress = (target * 1000 / dur).toInt()
+        binding.tvTime.text = "${FormatUtils.formatDurationMs(target)} / ${FormatUtils.formatDurationMs(dur)}"
+    }
+
+    private fun toggleRepeat() {
+        repeatOne = !repeatOne
+        audioPlayer?.repeatMode = if (repeatOne) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        renderRepeat()
+    }
+
+    private fun renderRepeat() {
+        binding.btnRepeat.text = if (repeatOne) "单曲" else "循环"
+        binding.btnRepeat.setBackgroundResource(
+            if (repeatOne) R.drawable.bg_audio_ctrl_on else R.drawable.bg_audio_ctrl
+        )
+        binding.btnRepeat.setTextColor(
+            ContextCompat.getColor(this, if (repeatOne) R.color.accent_pressed else R.color.text_secondary)
+        )
+    }
+
+    private fun cycleSpeed() {
+        val idx = SPEED_OPTIONS.indexOfFirst { it == playbackSpeed }
+        playbackSpeed = SPEED_OPTIONS[((if (idx < 0) 0 else idx) + 1) % SPEED_OPTIONS.size]
+        audioPlayer?.setPlaybackSpeed(playbackSpeed)
+        renderSpeed()
+    }
+
+    private fun renderSpeed() {
+        binding.btnSpeed.text = when (playbackSpeed) {
+            1.0f -> "1.0x"
+            1.5f -> "1.5x"
+            2.0f -> "2.0x"
+            else -> "%.2fx".format(playbackSpeed)
+        }
+        val on = playbackSpeed != 1.0f
+        binding.btnSpeed.setBackgroundResource(
+            if (on) R.drawable.bg_audio_ctrl_on else R.drawable.bg_audio_ctrl
+        )
+        binding.btnSpeed.setTextColor(
+            ContextCompat.getColor(this, if (on) R.color.accent_pressed else R.color.text_secondary)
+        )
+    }
+
+    /** 新建 player 后把循环/倍速/音量重新应用，保证与按钮状态一致 */
+    private fun applyAudioPrefs(p: Player) {
+        p.repeatMode = if (repeatOne) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        p.setPlaybackSpeed(playbackSpeed)
+        val vol = audioVolume ?: p.volume.also { audioVolume = it }
+        p.volume = vol
+    }
+
     private fun prepareAudio() {
         val v = video ?: return
         lifecycleScope.launch {
@@ -265,6 +352,7 @@ class ArticleActivity : AppCompatActivity() {
                         onAudioError(error)
                     }
                 })
+                applyAudioPrefs(p)
                 p.playWhenReady = true
                 audioPlayer = p
             } catch (e: Exception) {

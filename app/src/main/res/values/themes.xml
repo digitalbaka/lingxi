@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.LingXi" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="colorPrimary">@color/lx_green</item>
-        <item name="colorPrimaryDark">@color/lx_green_dark</item>
-        <item name="colorAccent">@color/lx_green</item>
-        <item name="android:windowBackground">@color/lx_bg</item>
-        <item name="android:statusBarColor">@color/lx_green_dark</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimaryDark">@color/brand_sky</item>
+        <item name="colorAccent">@color/brand_purple</item>
+        <item name="android:windowBackground">@color/surface_sunken</item>
+        <item name="android:statusBarColor">@color/brand_sky</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/nav_bar</item>
+        <item name="android:textColorHint">@color/text_hint</item>
     </style>
 </resources>

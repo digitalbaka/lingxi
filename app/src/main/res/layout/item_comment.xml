@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/lx_card"
+    android:background="@color/surface"
     android:orientation="vertical"
     android:padding="12dp">
 
@@ -45,7 +45,7 @@
                     android:layout_marginStart="6dp"
                     android:background="@drawable/bg_tag"
                     android:text="UP"
-                    android:textColor="@color/lx_green_dark"
+                    android:textColor="@color/tag_text"
                     android:textSize="10sp"
                     android:visibility="gone" />
 
@@ -56,7 +56,7 @@
                     android:layout_marginStart="6dp"
                     android:background="@drawable/bg_tag"
                     android:text="置顶"
-                    android:textColor="@color/lx_green_dark"
+                    android:textColor="@color/tag_text"
                     android:textSize="10sp"
                     android:visibility="gone" />
             </LinearLayout>
@@ -66,8 +66,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/lx_text"
-                android:textSize="14sp" />
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -134,7 +134,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:background="#F5F7FA"
+                android:background="@drawable/bg_reply_panel"
                 android:orientation="vertical"
                 android:padding="8dp"
                 android:visibility="gone" />

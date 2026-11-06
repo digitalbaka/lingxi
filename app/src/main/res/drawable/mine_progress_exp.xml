@@ -2,14 +2,15 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@android:id/background">
         <shape>
-            <solid android:color="@color/lx_divider" />
+            <solid android:color="@color/stroke" />
             <corners android:radius="3dp" />
         </shape>
     </item>
     <item android:id="@android:id/progress">
         <clip>
             <shape>
-                <solid android:color="@color/lx_green" />
+                <!-- 经验条改为纯色：渐变只保留在头图与主按钮两处 -->
+                <solid android:color="@color/accent" />
                 <corners android:radius="3dp" />
             </shape>
         </clip>

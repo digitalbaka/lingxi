@@ -2,11 +2,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_card"
+    android:background="@android:color/transparent"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="14dp"
-    android:paddingVertical="13dp">
+    android:paddingStart="16dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="14dp">
 
     <ImageView
         android:id="@+id/ivIcon"
@@ -41,6 +43,6 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="6dp"
         android:text="›"
-        android:textColor="@color/lx_text_sub"
+        android:textColor="@color/text_hint"
         android:textSize="20sp" />
 </LinearLayout>

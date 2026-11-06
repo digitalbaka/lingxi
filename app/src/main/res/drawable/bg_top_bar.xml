@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 顶栏：纯白底 + 系统 elevation 阴影，与详情页顶栏保持一致；不再使用品牌渐变 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/surface" />
+</shape>

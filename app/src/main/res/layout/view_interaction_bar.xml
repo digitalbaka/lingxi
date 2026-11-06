@@ -2,9 +2,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/lx_card"
+    android:background="@color/surface"
     android:orientation="horizontal"
-    android:paddingVertical="4dp">
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
 
     <TextView
         android:id="@+id/btnLike"
@@ -12,9 +13,11 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:gravity="center"
-        android:paddingVertical="8dp"
+        android:minHeight="44dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:text="❤ 点赞"
-        android:textColor="@color/lx_text_sub"
+        android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 
     <TextView
@@ -23,9 +26,11 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:gravity="center"
-        android:paddingVertical="8dp"
+        android:minHeight="44dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:text="◉ 投币"
-        android:textColor="@color/lx_text_sub"
+        android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 
     <TextView
@@ -34,9 +39,11 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:gravity="center"
-        android:paddingVertical="8dp"
+        android:minHeight="44dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:text="★ 收藏"
-        android:textColor="@color/lx_text_sub"
+        android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 
     <TextView
@@ -45,8 +52,10 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:gravity="center"
-        android:paddingVertical="8dp"
+        android:minHeight="44dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:text="↗ 分享"
-        android:textColor="@color/lx_text_sub"
+        android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 </LinearLayout>

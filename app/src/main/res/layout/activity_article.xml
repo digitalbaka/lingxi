@@ -11,16 +11,21 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/lx_card"
+        android:background="@color/surface"
+        android:elevation="2dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="10dp">
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp">
 
         <TextView
             android:id="@+id/btnBack"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="8dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:text="←"
             android:textColor="@color/lx_text"
             android:textSize="20sp" />
@@ -55,7 +60,8 @@
                 android:id="@+id/ivCover"
                 android:layout_width="match_parent"
                 android:layout_height="210dp"
-                android:background="@drawable/bg_cover_placeholder"
+                android:background="@drawable/bg_cover_rounded"
+                android:clipToOutline="true"
                 android:scaleType="centerCrop"
                 android:visibility="gone" />
 
@@ -63,8 +69,11 @@
                 android:id="@+id/tvTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="12dp"
-                android:textColor="@color/lx_text"
+                android:paddingStart="14dp"
+                android:paddingTop="14dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="6dp"
+                android:textColor="@color/text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -73,7 +82,8 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingHorizontal="12dp">
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp">
 
                 <ImageView
                     android:id="@+id/ivUpAvatar"
@@ -96,6 +106,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_button_green"
+                    android:gravity="center"
+                    android:minHeight="32dp"
                     android:text="关注"
                     android:textColor="@color/white"
                     android:textSize="13sp" />
@@ -105,10 +117,11 @@
                 android:id="@+id/tvMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
+                android:paddingStart="14dp"
                 android:paddingTop="6dp"
+                android:paddingEnd="14dp"
                 android:paddingBottom="4dp"
-                android:textColor="@color/lx_text_sub"
+                android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <include
@@ -119,59 +132,170 @@
                 android:id="@+id/audioBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@color/lx_card"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="10dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="16dp"
                 android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/btnPlayPause"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp"
-                    android:text="播放"
-                    android:textColor="@color/lx_green"
-                    android:textSize="15sp" />
 
                 <SeekBar
                     android:id="@+id/seekBar"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:max="1000" />
+                    android:max="1000"
+                    android:maxHeight="4dp"
+                    android:minHeight="4dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:progressDrawable="@drawable/audio_seekbar_progress"
+                    android:splitTrack="false"
+                    android:thumb="@drawable/audio_seekbar_thumb" />
 
                 <TextView
                     android:id="@+id/tvTime"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="4dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
                     android:text="00:00 / 00:00"
-                    android:textColor="@color/lx_text_sub"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
+
+                <!-- 主控行：快退 / 播放 / 快进 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnRewind"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="20dp"
+                        android:background="@drawable/bg_audio_ctrl"
+                        android:contentDescription="快退 15 秒"
+                        android:gravity="center"
+                        android:text="-15"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnPlayPause"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:background="@drawable/bg_audio_play"
+                        android:elevation="6dp"
+                        android:gravity="center"
+                        android:text="播放"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnForward"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="20dp"
+                        android:background="@drawable/bg_audio_ctrl"
+                        android:contentDescription="快进 15 秒"
+                        android:gravity="center"
+                        android:text="+15"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- 辅助行：单曲循环 / 倍速 / 音量 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnRepeat"
+                        android:layout_width="64dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_audio_ctrl"
+                        android:contentDescription="单曲循环"
+                        android:gravity="center"
+                        android:text="循环"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnSpeed"
+                        android:layout_width="60dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_audio_ctrl"
+                        android:contentDescription="播放倍速"
+                        android:gravity="center"
+                        android:text="1.0x"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:text="音量"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekVolume"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_weight="1"
+                        android:max="100"
+                        android:maxHeight="4dp"
+                        android:minHeight="4dp"
+                        android:paddingStart="6dp"
+                        android:paddingEnd="6dp"
+                        android:progressDrawable="@drawable/audio_seekbar_progress"
+                        android:splitTrack="false"
+                        android:thumb="@drawable/audio_seekbar_thumb" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/llContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@color/lx_card"
+                android:background="@color/surface"
                 android:orientation="vertical"
-                android:padding="12dp" />
+                android:padding="14dp" />
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="0.5dp"
-                android:layout_marginHorizontal="12dp"
+                android:layout_marginStart="14dp"
                 android:layout_marginTop="8dp"
-                android:background="@color/lx_divider" />
+                android:layout_marginEnd="14dp"
+                android:background="@color/stroke" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:padding="12dp"
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp"
                 android:text="评论"
-                android:textColor="@color/lx_text"
+                android:textColor="@color/text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -183,7 +307,7 @@
                 android:id="@+id/rvComments"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@color/lx_card" />
+                android:background="@color/surface" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>
