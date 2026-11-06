@@ -1,6 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/lx_green" />
-    <corners android:radius="6dp" />
-    <padding android:left="12dp" android:top="8dp" android:right="12dp" android:bottom="8dp" />
-</shape>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape>
+            <solid android:color="@color/accent_pressed" />
+            <corners android:radius="@dimen/radius_pill" />
+            <padding
+                android:bottom="8dp"
+                android:left="14dp"
+                android:right="14dp"
+                android:top="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <!-- 主按钮：全站唯一保留的品牌渐变，加深以保证白字可读（起点 4.99 / 终点 4.77） -->
+            <gradient
+                android:angle="0"
+                android:endColor="@color/brand_purple_deep"
+                android:startColor="@color/accent_pressed" />
+            <corners android:radius="@dimen/radius_pill" />
+            <padding
+                android:bottom="8dp"
+                android:left="14dp"
+                android:right="14dp"
+                android:top="8dp" />
+        </shape>
+    </item>
+</selector>

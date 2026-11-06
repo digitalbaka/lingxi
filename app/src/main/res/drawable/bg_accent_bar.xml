@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 分区标题前的竖条改为纯色，避免满屏渐变 -->
+    <solid android:color="@color/accent" />
+    <corners android:radius="2dp" />
+    <size
+        android:width="3dp"
+        android:height="16dp" />
+</shape>

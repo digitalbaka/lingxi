@@ -85,10 +85,13 @@
         android:id="@+id/danmakuBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/lx_card"
+        android:background="@color/surface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="6dp">
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp">
 
         <EditText
             android:id="@+id/etDanmaku"
@@ -99,10 +102,12 @@
             android:hint="发个弹幕吧"
             android:inputType="text"
             android:maxLines="1"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="7dp"
-            android:textColor="@color/lx_text"
-            android:textColorHint="@color/lx_text_sub"
+            android:paddingStart="14dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="8dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
             android:textSize="13sp" />
 
         <TextView
@@ -111,6 +116,8 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:background="@drawable/bg_button_green"
+            android:gravity="center"
+            android:minHeight="34dp"
             android:text="发送"
             android:textColor="@color/white"
             android:textSize="13sp" />
@@ -120,18 +127,24 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:padding="6dp"
+            android:gravity="center"
+            android:minHeight="34dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
             android:text="弹幕开"
-            android:textColor="@color/lx_text_sub"
+            android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
         <TextView
             android:id="@+id/btnDanmakuSettings"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:padding="6dp"
+            android:gravity="center"
+            android:minHeight="34dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
             android:text="设置"
-            android:textColor="@color/lx_text_sub"
+            android:textColor="@color/text_secondary"
             android:textSize="13sp" />
     </LinearLayout>
 
@@ -151,10 +164,11 @@
                 android:id="@+id/tvTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
+                android:paddingStart="14dp"
                 android:paddingTop="12dp"
+                android:paddingEnd="14dp"
                 android:paddingBottom="4dp"
-                android:textColor="@color/lx_text"
+                android:textColor="@color/text_primary"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -163,21 +177,22 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingHorizontal="12dp">
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp">
 
                 <TextView
                     android:id="@+id/tvMeta"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textColor="@color/lx_text_sub"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/tvViewers"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/lx_green"
+                    android:textColor="@color/accent"
                     android:textSize="12sp"
                     android:visibility="gone" />
             </LinearLayout>
@@ -187,7 +202,10 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="12dp">
+                android:paddingStart="14dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp">
 
                 <ImageView
                     android:id="@+id/ivUpAvatar"
@@ -210,6 +228,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_button_green"
+                    android:gravity="center"
+                    android:minHeight="32dp"
                     android:text="关注"
                     android:textColor="@color/white"
                     android:textSize="13sp" />
@@ -223,9 +243,11 @@
                 android:id="@+id/tvQuality"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="8dp"
-                android:textColor="@color/lx_green"
+                android:paddingStart="14dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp"
+                android:textColor="@color/accent"
                 android:textSize="13sp"
                 android:visibility="gone" />
 
@@ -235,26 +257,31 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="2"
-                android:paddingHorizontal="12dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:paddingBottom="8dp"
-                android:textColor="@color/lx_text_sub"
+                android:textColor="@color/text_secondary"
                 android:textSize="13sp"
                 android:visibility="gone" />
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="0.5dp"
-                android:layout_marginHorizontal="12dp"
+                android:layout_marginStart="14dp"
                 android:layout_marginTop="4dp"
-                android:background="@color/lx_divider" />
+                android:layout_marginEnd="14dp"
+                android:background="@color/stroke" />
 
             <TextView
                 android:id="@+id/tvRelatedTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:padding="12dp"
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp"
                 android:text="相关推荐"
-                android:textColor="@color/lx_text"
+                android:textColor="@color/text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -263,22 +290,27 @@
                 android:id="@+id/rvRelated"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:visibility="gone" />
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="0.5dp"
-                android:layout_marginHorizontal="12dp"
+                android:layout_marginStart="14dp"
                 android:layout_marginTop="8dp"
-                android:background="@color/lx_divider" />
+                android:layout_marginEnd="14dp"
+                android:background="@color/stroke" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:padding="12dp"
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp"
                 android:text="评论"
-                android:textColor="@color/lx_text"
+                android:textColor="@color/text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -290,7 +322,7 @@
                 android:id="@+id/rvComments"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@color/lx_card" />
+                android:background="@color/surface" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

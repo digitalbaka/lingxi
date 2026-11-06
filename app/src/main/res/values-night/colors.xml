@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式：同名覆盖，页面无需任何条件判断 -->
+    <color name="surface">#1C1F2E</color>
+    <color name="surface_alt">#232840</color>
+    <color name="surface_sunken">#12141F</color>
+    <color name="text_primary">#F2F3FA</color>
+    <color name="text_secondary">#A9AECB</color>
+    <color name="text_hint">#8E93B2</color>
+    <color name="accent">#5FD0FF</color>
+    <color name="accent_pressed">#7FB9FF</color>
+    <color name="accent_soft">#1B2942</color>
+    <color name="accent_pink">#FF9CC8</color>
+    <color name="tag_bg">#3A1E33</color>
+    <color name="tag_text">#FF9CC8</color>
+    <color name="stroke">#333857</color>
+    <color name="on_primary_muted">#CCFFFFFF</color>
+    <color name="on_media">#FFFFFFFF</color>
+    <color name="scrim_40">#66000000</color>
+    <color name="scrim_60">#99000000</color>
+    <color name="scrim_70">#B3000000</color>
+    <color name="brand_purple_deep">#7A5BE0</color>
+    <color name="nav_bar">#12141F</color>
+</resources>

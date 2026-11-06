@@ -1,16 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="lx_green">#10B981</color>
-    <color name="lx_green_dark">#059669</color>
-    <color name="lx_green_light">#D1FAE5</color>
-    <color name="lx_bg">#F5F7FA</color>
-    <color name="lx_card">#FFFFFF</color>
-    <color name="lx_text">#1F2937</color>
-    <color name="lx_text_sub">#6B7280</color>
-    <color name="lx_divider">#E5E7EB</color>
-    <color name="lx_red">#EF4444</color>
-    <color name="lx_orange">#F59E0B</color>
-    <color name="lx_blue">#3B82F6</color>
+    <!-- ===== 品牌色（二次元：天蓝 → 粉紫 → 樱粉） ===== -->
+    <color name="brand_sky">#4FC3FF</color>
+    <color name="brand_mid">#7FA8FF</color>
+    <color name="brand_purple">#A98BFF</color>
+    <!-- 用于承载白字的品牌渐变终点（WCAG：白字对比 4.77） -->
+    <color name="brand_purple_deep">#7A5BE0</color>
+    <color name="brand_pink">#FF9CC8</color>
+    <color name="brand_pink_deep">#F0689B</color>
+
+    <!-- ===== 语义层（页面只用这一层） ===== -->
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_alt">#F1F4FF</color>
+    <color name="surface_sunken">#F4F5FF</color>
+    <color name="text_primary">#2B2F4A</color>
+    <color name="text_secondary">#5F6588</color>
+    <color name="text_hint">#6E7395</color>
+    <color name="accent">#4FC3FF</color>
+    <color name="accent_pressed">#1E74B3</color>
+    <color name="accent_soft">#E8F4FF</color>
+    <color name="accent_pink">#F0689B</color>
+    <color name="tag_bg">#FFE8F3</color>
+    <color name="tag_text">#C42A61</color>
+    <color name="stroke">#E4E7F8</color>
+    <color name="on_primary_muted">#E6FFFFFF</color>
+    <color name="on_media">#FFFFFFFF</color>
+    <color name="scrim_40">#660F1430</color>
+    <color name="scrim_60">#990F1430</color>
+    <color name="scrim_70">#B30F1430</color>
+    <!-- 系统导航栏底色（白图标需深底） -->
+    <color name="nav_bar">#2B2F4A</color>
+
+    <!-- ===== 旧调色板名称（保持所有既有引用可用，值已切换为二次元配色） ===== -->
+    <color name="lx_green">@color/accent</color>
+    <color name="lx_green_dark">@color/accent_pressed</color>
+    <color name="lx_green_light">@color/accent_soft</color>
+    <color name="lx_bg">@color/surface_sunken</color>
+    <color name="lx_card">@color/surface</color>
+    <color name="lx_text">@color/text_primary</color>
+    <color name="lx_text_sub">@color/text_secondary</color>
+    <color name="lx_divider">@color/stroke</color>
+    <color name="lx_red">#FF5C8A</color>
+    <color name="lx_orange">#FFA53D</color>
+    <color name="lx_blue">#4F9DFF</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>

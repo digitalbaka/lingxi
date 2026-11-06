@@ -14,7 +14,7 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card"
+            android:background="@drawable/bg_card_hero"
             android:padding="16dp">
 
             <LinearLayout
@@ -62,7 +62,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:background="@drawable/bg_tag"
-                                android:textColor="@color/lx_green_dark"
+                                android:textColor="@color/tag_text"
                                 android:textSize="11sp"
                                 android:visibility="gone" />
                         </LinearLayout>
@@ -82,8 +82,10 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_button_green"
-                        android:paddingHorizontal="18dp"
-                        android:paddingVertical="9dp"
+                        android:paddingStart="18dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="18dp"
+                        android:paddingBottom="9dp"
                         android:text="点击登录"
                         android:textColor="@color/white"
                         android:textSize="14sp"
@@ -135,7 +137,8 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="horizontal"
-            android:paddingVertical="14dp">
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp">
 
             <LinearLayout
                 android:id="@+id/actionCheckin"
@@ -266,8 +269,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
-            android:divider="@drawable/bg_card"
+            android:clipToOutline="true"
+            android:divider="@drawable/divider_row"
             android:orientation="vertical"
-            android:showDividers="none" />
+            android:showDividers="middle" />
     </LinearLayout>
 </ScrollView>
