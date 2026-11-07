@@ -61,7 +61,8 @@ class ArticleActivity : AppCompatActivity() {
     private var audioUrl = ""
     private var retriedAfterRecover = false
 
-    // 播放器设置：player 会被 onStop 释放，因此状态存在字段里，新建 player 后重新应用
+    // 播放器设置：player 会被 onStop 释放，因此状态存在字段里，新建 player 后重新应用；
+    // 字段值会落盘到 SharedPreferences，退出重进（新实例）也能回填，且跨稿件共享
     private var repeatOne = false
     private var playbackSpeed = 1.0f
     private var audioVolume: Float? = null
@@ -69,7 +70,15 @@ class ArticleActivity : AppCompatActivity() {
     companion object {
         private const val SEEK_STEP_MS = 15_000L
         private val SPEED_OPTIONS = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+
+        // 音频播放器偏好（全局共享，不按稿件区分）
+        private const val PREFS_NAME = "lingxi_audio_prefs"
+        private const val KEY_REPEAT_ONE = "repeat_one"
+        private const val KEY_PLAYBACK_SPEED = "playback_speed"
+        private const val KEY_VOLUME = "volume"
     }
+
+    private val audioPrefs by lazy { getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     private var viewReported = false
     private var viewReportJob: Job? = null
@@ -106,8 +115,16 @@ class ArticleActivity : AppCompatActivity() {
             finish()
             return
         }
+        loadAudioPrefs()
         initViews()
         loadDetail(videoId)
+    }
+
+    /** 读回上次的循环/倍速/音量（跨稿件共享），控件与 player 都用这份值 */
+    private fun loadAudioPrefs() {
+        repeatOne = audioPrefs.getBoolean(KEY_REPEAT_ONE, false)
+        playbackSpeed = audioPrefs.getFloat(KEY_PLAYBACK_SPEED, 1.0f)
+        audioVolume = audioPrefs.getFloat(KEY_VOLUME, 1.0f).coerceIn(0f, 1f)
     }
 
     private fun initViews() {
@@ -125,7 +142,10 @@ class ArticleActivity : AppCompatActivity() {
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                // 拖动结束才落盘，避免每一帧都写一次
+                audioPrefs.edit().putFloat(KEY_VOLUME, audioVolume ?: 1.0f).apply()
+            }
         })
         // 初始化音量滑块（fromUser=false，不会误写字段）
         binding.seekVolume.progress = ((audioVolume ?: 1.0f) * 100).toInt()
@@ -270,6 +290,7 @@ class ArticleActivity : AppCompatActivity() {
     private fun toggleRepeat() {
         repeatOne = !repeatOne
         audioPlayer?.repeatMode = if (repeatOne) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        audioPrefs.edit().putBoolean(KEY_REPEAT_ONE, repeatOne).apply()
         renderRepeat()
     }
 
@@ -287,6 +308,7 @@ class ArticleActivity : AppCompatActivity() {
         val idx = SPEED_OPTIONS.indexOfFirst { it == playbackSpeed }
         playbackSpeed = SPEED_OPTIONS[((if (idx < 0) 0 else idx) + 1) % SPEED_OPTIONS.size]
         audioPlayer?.setPlaybackSpeed(playbackSpeed)
+        audioPrefs.edit().putFloat(KEY_PLAYBACK_SPEED, playbackSpeed).apply()
         renderSpeed()
     }
 

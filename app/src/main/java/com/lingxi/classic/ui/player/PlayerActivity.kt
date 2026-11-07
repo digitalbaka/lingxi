@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -95,6 +96,8 @@ class PlayerActivity : AppCompatActivity() {
         const val VERTICAL_RANGE_RATIO = 0.7f
         /** 控制条底部区域高度（dp）：该区域不接管手势，保留按钮点击 */
         const val CONTROLS_GUARD_DP = 72
+        /** 双击快进/快退步长（毫秒） */
+        const val DOUBLE_TAP_SEEK_MS = 10_000L
     }
 
     private lateinit var binding: ActivityPlayerBinding
@@ -125,6 +128,8 @@ class PlayerActivity : AppCompatActivity() {
     /** 进入页面时的亮度覆盖值，-1=跟随系统；离开页面恢复 */
     private var originalBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
     private var gestureMode = GESTURE_NONE
+    /** 本次触摸落在顶栏/控制条区域，整个手势序列都不接管 */
+    private var gestureBlocked = false
     private var gestureStartX = 0f
     private var gestureStartY = 0f
     private var gestureOnLeftSide = false
@@ -132,6 +137,8 @@ class PlayerActivity : AppCompatActivity() {
     private var startVolume = 0
     private var startPositionMs = 0L
     private var previewPositionMs = 0L
+    /** 双击识别：与触摸监听并行喂事件，只做 ±10 秒，不改单击语义 */
+    private lateinit var tapDetector: GestureDetector
     private lateinit var gestureOverlay: LinearLayout
     private lateinit var gestureLabel: TextView
     private lateinit var gestureBar: ProgressBar
@@ -527,6 +534,17 @@ class PlayerActivity : AppCompatActivity() {
     private fun setupGestures() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         originalBrightness = window.attributes.screenBrightness
+        // 双击快进/快退：左半区 -10s、右半区 +10s。检测器只旁路监听，不消费事件，
+        // 单击显隐控制条仍由 media3 默认处理
+        tapDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                // 顶栏 / 控制条区域的双击不接管，与滑动守卫保持一致
+                if (!gestureBlocked) seekByDoubleTap(e.x)
+                return true
+            }
+        })
         // 挂在 PlayerView 上并始终返回 false：单击/双击继续交给默认控制条处理，
         // 只有位移超过阈值后才由这里接手（控制条按钮自身会消费事件，天然不冲突）
         binding.playerView.setOnTouchListener { _, ev -> handleGestureTouch(ev) }
@@ -536,23 +554,34 @@ class PlayerActivity : AppCompatActivity() {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 gestureMode = GESTURE_NONE
-                // 顶栏（返回/标题/全屏）与底部系统控制条区域不接管手势
-                val topBar = binding.btnBack.parent as? View
-                if (topBar != null && ev.y < topBar.bottom) return false
-                if (binding.playerView.isControllerFullyVisible &&
-                    ev.y > binding.playerView.height - dp(CONTROLS_GUARD_DP)
-                ) return false
+                gestureBlocked = false
+                // 先重置起点：即便本次被拦截，MOVE 也不会沿用上一次手势的起点
                 gestureStartX = ev.x
                 gestureStartY = ev.y
+                // 顶栏（返回/标题/全屏）与底部系统控制条区域不接管手势
+                val topBar = binding.btnBack.parent as? View
+                if (topBar != null && ev.y < topBar.bottom) {
+                    gestureBlocked = true
+                } else if (binding.playerView.isControllerFullyVisible &&
+                    ev.y > binding.playerView.height - dp(CONTROLS_GUARD_DP)
+                ) {
+                    gestureBlocked = true
+                }
             }
-            MotionEvent.ACTION_MOVE -> handleGestureMove(ev)
+            MotionEvent.ACTION_MOVE -> if (!gestureBlocked) handleGestureMove(ev)
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (gestureMode == GESTURE_HORIZONTAL && ev.actionMasked == MotionEvent.ACTION_UP) {
+                if (!gestureBlocked && gestureMode == GESTURE_HORIZONTAL &&
+                    ev.actionMasked == MotionEvent.ACTION_UP
+                ) {
                     commitHorizontalSeek()
                 }
                 gestureMode = GESTURE_NONE
+                gestureBlocked = false
             }
         }
+        // 在区域判定之后再喂事件：onDoubleTap 在第二次 DOWN 时回调，
+        // 此时 gestureBlocked 已是本次落点结果
+        tapDetector.onTouchEvent(ev)
         return false
     }
 
@@ -635,6 +664,21 @@ class PlayerActivity : AppCompatActivity() {
         showGestureOverlay("$action ${sec}s", 100, 100)
     }
 
+    /** 双击：左半区后退 10s、右半区前进 10s；不改播放状态，落点裁剪到 [0, duration] */
+    private fun seekByDoubleTap(x: Float) {
+        val p = player ?: return
+        val dur = p.duration
+        if (dur <= 0) return
+        val delta = if (x < binding.playerView.width / 2f) -DOUBLE_TAP_SEEK_MS else DOUBLE_TAP_SEEK_MS
+        val target = (p.currentPosition + delta).coerceIn(0L, dur)
+        if (target == p.currentPosition) return
+        p.seekTo(target)
+        binding.danmakuView.seekTo(target)
+        showGestureOverlay(
+            if (delta < 0) "« 10 秒" else "10 秒 »", 100, 100, showBar = false
+        )
+    }
+
     /** 尚未设置覆盖值时用系统亮度作起点（只读，不申请 WRITE_SETTINGS） */
     private fun effectiveBrightness(): Float {
         val attr = window.attributes.screenBrightness
@@ -645,10 +689,12 @@ class PlayerActivity : AppCompatActivity() {
         return (sys / 255f).coerceIn(0f, 1f)
     }
 
-    private fun showGestureOverlay(label: String, progress: Int, max: Int) {
+    private fun showGestureOverlay(label: String, progress: Int, max: Int, showBar: Boolean = true) {
         handler.removeCallbacks(hideGestureOverlay)
+        // 复用同一个浮层：连续操作只刷新文字，不会叠出多个
         gestureOverlay.visibility = View.VISIBLE
         gestureLabel.text = label
+        gestureBar.visibility = if (showBar) View.VISIBLE else View.GONE
         gestureBar.max = max.coerceAtLeast(1)
         gestureBar.progress = progress.coerceIn(0, gestureBar.max)
         handler.postDelayed(hideGestureOverlay, 2_000)
