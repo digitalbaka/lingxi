@@ -7,10 +7,12 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
+import android.media.MediaCodec
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.GestureDetector
 import android.view.Gravity
@@ -94,10 +96,16 @@ class PlayerActivity : AppCompatActivity() {
         const val SEEK_FULL_WIDTH_SEC = 120
         /** 竖滑满量程所需的高度比例：70% 播放区高度 ≈ 亮度 0→100% / 音量 0→最大 */
         const val VERTICAL_RANGE_RATIO = 0.7f
-        /** 控制条底部区域高度（dp）：该区域不接管手势，保留按钮点击 */
-        const val CONTROLS_GUARD_DP = 72
+        /** 控制条底部区域高度兜底（dp）：优先用实测控件位置，找不到控件时按它算 */
+        const val CONTROLS_GUARD_DP = 100
+        /** 双击判定窗口：两击间隔超过它视为新的一次点击序列（GestureDetector 双击上限 300ms） */
+        const val TAP_SEQUENCE_GAP_MS = 400L
+        /** 控制条按钮首击的暂存时长：略大于双击窗口，等双击判定后再决定是否补发单击 */
+        const val BUTTON_TAP_DELAY_MS = 320L
         /** 双击快进/快退步长（毫秒） */
         const val DOUBLE_TAP_SEEK_MS = 10_000L
+        /** 降档后新档位的首帧窗口（毫秒）：新档位要重新建源/解码，不能沿用已过期的首次窗口 */
+        const val DOWNGRADE_FIRST_FRAME_TIMEOUT_MS = 6_000L
     }
 
     private lateinit var binding: ActivityPlayerBinding
@@ -108,6 +116,10 @@ class PlayerActivity : AppCompatActivity() {
     private var playUrl: String = ""
     private var currentQualityUrl: String? = null
     private var retriedAfterRecover = false
+    /** 节点重授权重试任务：到点降档时要能中断它，避免两条链路各起一次播放 */
+    private var recoverJob: Job? = null
+    /** 建源+建播放器的任务：被新的清晰度/降档/重授权打断时取消，防止旧任务把播放器建成两份 */
+    private var playbackJob: Job? = null
     private var resumePosition: Long = 0
     private var following = false
     private var descExpanded = false
@@ -118,6 +130,11 @@ class PlayerActivity : AppCompatActivity() {
     // ---- 清晰度自动降档（站点部分高码率/4K 无法编码，客户端不黑屏干等）----
     /** 本次播放是否已经出过画面；未出画面且超时则视为失败 */
     private var firstFrameRendered = false
+    /**
+     * 当前清晰度首帧截止时刻（elapsedRealtime）。
+     * 节点重授权后的重试只续用剩余时间、不重新计时，否则每授权一次就把降档窗口往后推一次。
+     */
+    private var firstFrameDeadlineMs = 0L
     /** 本视频已尝试失败的清晰度 URL，防止同一档反复重试 */
     private val failedQualityUrls = mutableSetOf<String>()
     /** 本视频已提示过的降档目标，避免同一提示反复弹 */
@@ -137,8 +154,36 @@ class PlayerActivity : AppCompatActivity() {
     private var startVolume = 0
     private var startPositionMs = 0L
     private var previewPositionMs = 0L
-    /** 双击识别：与触摸监听并行喂事件，只做 ±10 秒，不改单击语义 */
+    /** 双击识别：在分发层旁路喂事件，只做 ±10 秒，不改单击语义 */
     private lateinit var tapDetector: GestureDetector
+    /** 最近一次 ACTION_DOWN 是否落在播放器内，以及换算到播放器坐标系后的落点 */
+    private var lastDownInPlayer = false
+    private var lastDownX = 0f
+    private var lastDownY = 0f
+    /** 新一次点击序列开始时（第一击按下之前）控制条是否可见的快照 */
+    private var seqControllerVisible = false
+    /** 最近一次 ACTION_DOWN 的时间戳，用于判断是否开启新的一次点击序列 */
+    private var lastTapDownTime = 0L
+    /** 控制条保护区的实测顶边（playerView 局部坐标），-1 表示尚未测量 */
+    private var controlsGuardTop = -1f
+    /** 首击是否落在 media3 控制按钮上：是则这一串双击不 seek */
+    private var lastDownOnControlButton = false
+    /** 落在控制条按钮上的首击先暂存，等双击判定后再补发单击（双击则不触发按钮动作） */
+    private var pendingButton: View? = null
+    private var pendingButtonRunnable: Runnable? = null
+    private var pendingButtonRawX = 0f
+    private var pendingButtonRawY = 0f
+    /** 从控制条按钮开始的一串触摸：整串由分发层接管，不再交给 media3 */
+    private var swallowTouchSequence = false
+    /** 首击是否落在控制条可交互区（按钮/进度条）：整串双击都不 seek，且不触发按钮动作 */
+    private var seqDownOnControlArea = false
+    /** 首击是否落在进度条上：DefaultTimeBar 按下即 seek，必须先扣住再决定单击/拖动/双击 */
+    private var lastDownOnProgress = false
+    private var pendingProgress: View? = null
+    private var pendingProgressRunnable: Runnable? = null
+    private var progressDownRawX = 0f
+    /** 进度条首击后已产生拖动：拖动期间实时 seek，松手不再补发单击 */
+    private var progressDragging = false
     private lateinit var gestureOverlay: LinearLayout
     private lateinit var gestureLabel: TextView
     private lateinit var gestureBar: ProgressBar
@@ -184,10 +229,19 @@ class PlayerActivity : AppCompatActivity() {
 
     /** 首帧看门狗：一直没画面（黑屏/解码失败/长时间无首帧）也按播放失败处理，触发降档 */
     private val firstFrameWatchdog = Runnable {
-        val p = player ?: return@Runnable
-        if (firstFrameRendered || !p.playWhenReady) return@Runnable
-        if (p.playbackState == Player.STATE_ENDED) return@Runnable
+        if (firstFrameRendered) return@Runnable
+        val p = player
+        // 重授权 / 建源期间 player 可能为 null 或已报错：照样按窗口到点降档，
+        // 不把降档判定挂到「节点恢复成功」上，否则节点慢多久降档就晚多久
+        if (p != null && (p.playbackState == Player.STATE_ENDED || !p.playWhenReady)) return@Runnable
         onQualityUnplayable(null)
+    }
+
+    /** 按剩余窗口挂看门狗；窗口已过则立即（0 延迟）触发 */
+    private fun scheduleFirstFrameWatchdog() {
+        handler.removeCallbacks(firstFrameWatchdog)
+        val remain = (firstFrameDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        handler.postDelayed(firstFrameWatchdog, remain)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -264,6 +318,9 @@ class PlayerActivity : AppCompatActivity() {
         firstFrameRendered = false
         failedQualityUrls.clear()
         notifiedDowngradeTargets.clear()
+        // 首帧窗口从「进入播放页」起算：节点授权、建源、解密/解封装都算在 10 秒里，
+        // 不等到建源或首帧才起算，否则节点授权一慢降档窗口就被整体后移
+        firstFrameDeadlineMs = SystemClock.elapsedRealtime() + FIRST_FRAME_TIMEOUT_MS
         releasePlayer()
         binding.danmakuView.setDanmaku(emptyList())
         binding.loadingBar.visible = true
@@ -371,12 +428,27 @@ class PlayerActivity : AppCompatActivity() {
 
     // ==================== 播放 ====================
 
-    private fun startPlayback(v: Video, resumeMs: Long = 0) {
+    private fun startPlayback(
+        v: Video,
+        resumeMs: Long = 0,
+        /** 重开首帧窗口的时长：0 表示沿用 loadVideo（进入页面）时定的窗口；降档/手动换档才重开 */
+        resetFirstFrameWindowMs: Long = 0L,
+        /** 降档重开时跳过节点授权：本次播放链路已经确认授权失败，再等它只会把出画时间往后拖 */
+        skipNodeHandoff: Boolean = false
+    ) {
         releasePlayer()
         firstFrameRendered = false
-        lifecycleScope.launch {
+        if (resetFirstFrameWindowMs > 0L) {
+            firstFrameDeadlineMs = SystemClock.elapsedRealtime() + resetFirstFrameWindowMs
+        }
+        // 放在建源（内含 handoff 授权）之前：建源/重授权耗时也计入同一个窗口
+        scheduleFirstFrameWatchdog()
+        playbackJob?.cancel()
+        playbackJob = lifecycleScope.launch {
             try {
-                val ps = PlaybackHelper.buildPlaySource(this@PlayerActivity, v, currentQualityUrl)
+                val ps = PlaybackHelper.buildPlaySource(this@PlayerActivity, v, currentQualityUrl, skipNodeHandoff)
+                // 建源期间若已被降档/切清晰度/离开页面打断，不要再建这台播放器
+                if (!isActive) return@launch
                 playUrl = ps.url
                 val factory = VideoCacheManager.cacheDataSourceFactory(this@PlayerActivity, ps.headers)
                 val item = MediaItem.fromUri(ps.url)
@@ -400,16 +472,14 @@ class PlayerActivity : AppCompatActivity() {
                 p.addListener(playerListener)
                 player = p
 
-                // 首帧看门狗：默认/高清晰度若根本编不出可播的画面，10 秒内没首帧就自动降档
-                handler.removeCallbacks(firstFrameWatchdog)
-                handler.postDelayed(firstFrameWatchdog, FIRST_FRAME_TIMEOUT_MS)
-
                 if (resumeMs > 0) {
                     binding.danmakuView.seekTo(resumeMs)
                     toast("上次看到 ${FormatUtils.formatDurationMs(resumeMs)}")
                 }
                 handler.removeCallbacks(danmakuTicker)
                 handler.post(danmakuTicker)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 toast("播放失败：${e.message}")
             }
@@ -419,19 +489,28 @@ class PlayerActivity : AppCompatActivity() {
     /** 播放失败：先清毒缓存 + 重新节点授权重试一次（节点问题换档没用），仍失败则自动降档；降无可降才报错 */
     private fun onPlayError(error: PlaybackException) {
         binding.loadingBar.visible = false
-        handler.removeCallbacks(firstFrameWatchdog)
+        // 解码器/格式不支持与节点无关：重授权救不回来，直接降档，不白等一轮节点重试
+        if (isCodecFailure(error)) {
+            onQualityUnplayable(error)
+            return
+        }
         val url = playUrl
         if (!retriedAfterRecover) {
             retriedAfterRecover = true
             val pos = player?.currentPosition ?: 0
-            lifecycleScope.launch {
+            // 注意：这里不摘掉首帧看门狗。窗口从本清晰度首次尝试开始计时，
+            // 重授权期间照常到点判定，避免节点恢复把降档无限推迟。
+            recoverJob?.cancel()
+            recoverJob = lifecycleScope.launch {
                 val retry = try {
                     PlaybackHelper.recoverFromPlaybackError(this@PlayerActivity, url)
                 } catch (e: Exception) {
                     false
                 }
+                if (!isActive) return@launch
                 if (retry) {
                     toast("节点连接失败，正在重新授权…")
+                    // 沿用同一个首帧窗口，不因为重授权成功就重新给 10 秒
                     video?.let { startPlayback(it, pos) }
                 } else {
                     onQualityUnplayable(error)
@@ -440,6 +519,26 @@ class PlayerActivity : AppCompatActivity() {
         } else {
             onQualityUnplayable(error)
         }
+    }
+
+    /**
+     * 解码器初始化/解码失败、格式超出能力或不被支持：这台设备的硬解就是放不了这一档，
+     * 换节点、重授权都不会改变结论。识别出来直接降档，省掉一轮无意义的重试等待。
+     */
+    private fun isCodecFailure(error: PlaybackException): Boolean {
+        when (error.errorCode) {
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> return true
+        }
+        var cause: Throwable? = error
+        while (cause != null) {
+            if (cause is MediaCodec.CodecException) return true
+            cause = cause.cause
+        }
+        return false
     }
 
     // ==================== 清晰度自动降档 ====================
@@ -472,6 +571,9 @@ class PlayerActivity : AppCompatActivity() {
      * 位置在播放器重建时带入，用户无感。
      */
     private fun onQualityUnplayable(error: PlaybackException?) {
+        // 到点降档不再等节点重授权结果：中断仍在进行的重试，避免两条链路各起一次播放
+        recoverJob?.cancel()
+        recoverJob = null
         val v = video ?: return
         val ladder = qualityLadder()
         val curIdx = currentQualityIndex(ladder)
@@ -488,7 +590,8 @@ class PlayerActivity : AppCompatActivity() {
 
         currentQualityUrl = next.url
         binding.tvQuality.text = "清晰度：${next.label}"
-        startPlayback(v, pos)
+        // 降档重开：新档位给一个独立的较短窗口（不沿用已过期的首次窗口），并跳过已失败的节点授权
+        startPlayback(v, pos, DOWNGRADE_FIRST_FRAME_TIMEOUT_MS, skipNodeHandoff = true)
 
         if (notifiedDowngradeTargets.add(next.label)) {
             toast("「$fromLabel」无法播放，已切换到「${next.label}」")
@@ -534,20 +637,130 @@ class PlayerActivity : AppCompatActivity() {
     private fun setupGestures() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         originalBrightness = window.attributes.screenBrightness
-        // 双击快进/快退：左半区 -10s、右半区 +10s。检测器只旁路监听，不消费事件，
-        // 单击显隐控制条仍由 media3 默认处理
+        // 双击快进/快退：左半区 -10s、右半区 +10s。事件由 dispatchTouchEvent 旁路喂入，
+        // 不消费事件；单击显隐控制条、按钮点击仍由 media3 默认处理
         tapDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                // 顶栏 / 控制条区域的双击不接管，与滑动守卫保持一致
-                if (!gestureBlocked) seekByDoubleTap(e.x)
+                // 第二击到达：取消首击暂存的控制条按钮/进度条单击，双击不再触发按钮动作或 seek
+                pendingButtonRunnable?.let { handler.removeCallbacks(it) }
+                pendingButtonRunnable = null
+                pendingButton = null
+                pendingProgressRunnable?.let { handler.removeCallbacks(it) }
+                pendingProgressRunnable = null
+                pendingProgress = null
+                progressDragging = false
+                // 用第二次按下的落点判定左右半区与拦截区（分发层事件是窗口坐标，不能直接用 e.x）
+                if (!isDoubleTapBlocked(lastDownX, lastDownY)) seekByDoubleTap(lastDownX)
                 return true
             }
         })
-        // 挂在 PlayerView 上并始终返回 false：单击/双击继续交给默认控制条处理，
+        // 滑动手势挂在 PlayerView 上并始终返回 false：单击继续交给默认控制条，
         // 只有位移超过阈值后才由这里接手（控制条按钮自身会消费事件，天然不冲突）
         binding.playerView.setOnTouchListener { _, ev -> handleGestureTouch(ev) }
+    }
+
+    /**
+     * 双击识别放到 Activity 分发层：控制条可见时，落在其上的第二次按下会被 media3 的
+     * PlayerControlView 先消费，挂在 PlayerView 上的监听器根本收不到第二击，
+     * 结果就是「控制条一露出来双击就失效」。这里只旁路喂给 GestureDetector，不拦截事件：
+     * 单击显隐、按钮点击、上下滑亮度/音量、横滑 seek 全部保持原样。
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            val now = ev.eventTime
+            // 新的一次点击序列：在派发给子 View 之前快照控制条可见性，
+            // 否则第一击会把控制条隐藏/唤出，第二击再查就不是「双击开始时」的状态了
+            val newSequence = now - lastTapDownTime > TAP_SEQUENCE_GAP_MS
+            if (newSequence) {
+                seqControllerVisible = binding.playerView.isControllerFullyVisible
+                controlsGuardTop = measureControlsGuardTop()
+            }
+            lastTapDownTime = now
+
+            val loc = IntArray(2)
+            binding.playerView.getLocationOnScreen(loc)
+            lastDownX = ev.rawX - loc[0]
+            lastDownY = ev.rawY - loc[1]
+            lastDownInPlayer = lastDownX >= 0f && lastDownY >= 0f &&
+                lastDownX <= binding.playerView.width && lastDownY <= binding.playerView.height
+            lastDownOnControlButton = lastDownInPlayer && seqControllerVisible &&
+                findControlButtonAt(ev.rawX, ev.rawY) != null
+            // 进度条（DefaultTimeBar）按下即 seek，必须当成和按钮一样的「控制条内部」首击：
+            // 先扣住整串触摸，单击在 320ms 后补发（seek 到点击点），拖动则实时跟随，双击直接吞掉
+            val progress = if (lastDownInPlayer && seqControllerVisible && !lastDownOnControlButton)
+                findProgressBarAt(ev.rawX, ev.rawY) else null
+            lastDownOnProgress = progress != null
+            progressDragging = false
+            // 双击拦截看的是「序列第一击」的落点：第二击就算挪到画面中部也不能解除拦截
+            if (newSequence) seqDownOnControlArea = lastDownOnControlButton || lastDownOnProgress
+
+            // 落在控制条按钮/进度条上的首击先扣住：是单击就按 media3 原逻辑补发，是双击就整串吞掉
+            pendingButtonRunnable?.let { handler.removeCallbacks(it) }
+            pendingButtonRunnable = null
+            pendingButton = if (lastDownOnControlButton) findControlButtonAt(ev.rawX, ev.rawY) else null
+            pendingButtonRawX = ev.rawX
+            pendingButtonRawY = ev.rawY
+            pendingProgressRunnable?.let { handler.removeCallbacks(it) }
+            pendingProgressRunnable = null
+            pendingProgress = progress
+            progressDownRawX = ev.rawX
+            // 从按钮/进度条上开始的这一串触摸不再交给子 View，避免 MOVE 丢失 DOWN 后手势/点击打架
+            swallowTouchSequence = lastDownOnControlButton || lastDownOnProgress
+        } else if (ev.actionMasked == MotionEvent.ACTION_MOVE) {
+            val slop = GESTURE_SLOP_DP * resources.displayMetrics.density
+            // 一移动就不再是点击（按钮不做长按/拖动），但整串触摸仍吞掉，防止误触发亮度/音量
+            if (pendingButton != null &&
+                (abs(ev.rawX - pendingButtonRawX) > slop || abs(ev.rawY - pendingButtonRawY) > slop)
+            ) {
+                pendingButton = null
+            }
+            // 进度条：位移超过阈值即进入拖动，实时跟随手指 seek（保持 media3 拖动 seek 的原行为）
+            val bar = pendingProgress
+            if (bar != null) {
+                if (!progressDragging && abs(ev.rawX - progressDownRawX) > slop) progressDragging = true
+                if (progressDragging) seekToProgressPoint(bar, ev.rawX)
+            }
+        }
+        // 一次手势只在起点落在播放器内时才喂给检测器，避免弹幕条/评论区的触摸混进双击序列
+        if (lastDownInPlayer) tapDetector.onTouchEvent(ev)
+        // 暂存未决的首击：吞掉事件，等双击窗口过去再补发单击
+        if (swallowTouchSequence) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                if (pendingButton != null) {
+                    val btn = pendingButton
+                    val r = Runnable {
+                        if (pendingButton === btn) {
+                            pendingButton = null
+                            btn?.performClick()
+                        }
+                    }
+                    pendingButtonRunnable = r
+                    handler.postDelayed(r, BUTTON_TAP_DELAY_MS)
+                }
+                // 进度条单击：补发 media3 原有的「点到哪跳到哪」；拖动过的已实时 seek，不再补发
+                val bar = pendingProgress
+                if (bar != null && !progressDragging) {
+                    val r = Runnable {
+                        if (pendingProgress === bar) {
+                            pendingProgress = null
+                            seekToProgressPoint(bar, progressDownRawX)
+                        }
+                    }
+                    pendingProgressRunnable = r
+                    handler.postDelayed(r, BUTTON_TAP_DELAY_MS)
+                } else {
+                    pendingProgress = null
+                }
+            } else if (ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+                pendingButton = null
+                pendingProgress = null
+                progressDragging = false
+            }
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun handleGestureTouch(ev: MotionEvent): Boolean {
@@ -558,13 +771,11 @@ class PlayerActivity : AppCompatActivity() {
                 // 先重置起点：即便本次被拦截，MOVE 也不会沿用上一次手势的起点
                 gestureStartX = ev.x
                 gestureStartY = ev.y
-                // 顶栏（返回/标题/全屏）与底部系统控制条区域不接管手势
+                // 顶栏（返回/标题/全屏）与底部控制条区域不接管手势（用双击时的同一把尺子）
                 val topBar = binding.btnBack.parent as? View
                 if (topBar != null && ev.y < topBar.bottom) {
                     gestureBlocked = true
-                } else if (binding.playerView.isControllerFullyVisible &&
-                    ev.y > binding.playerView.height - dp(CONTROLS_GUARD_DP)
-                ) {
+                } else if (seqControllerVisible && ev.y >= controlsGuardTopOf(binding.playerView)) {
                     gestureBlocked = true
                 }
             }
@@ -579,9 +790,141 @@ class PlayerActivity : AppCompatActivity() {
                 gestureBlocked = false
             }
         }
-        // 在区域判定之后再喂事件：onDoubleTap 在第二次 DOWN 时回调，
-        // 此时 gestureBlocked 已是本次落点结果
-        tapDetector.onTouchEvent(ev)
+        return false
+    }
+
+    /** 顶栏整行、控制条按钮、以及底部整条控制条：这些位置的双击不 seek */
+    private fun isDoubleTapBlocked(x: Float, y: Float): Boolean {
+        val pv = binding.playerView
+        if (x < 0f || y < 0f || x > pv.width || y > pv.height) return true
+        val topBar = binding.btnBack.parent as? View
+        if (topBar != null && topBar.visibility == View.VISIBLE) {
+            val barLoc = IntArray(2)
+            topBar.getLocationOnScreen(barLoc)
+            val pvLoc = IntArray(2)
+            pv.getLocationOnScreen(pvLoc)
+            if (y < barLoc[1] - pvLoc[1] + topBar.height) return true
+        }
+        // 序列首击压在控制条按钮/进度条上：这一串双击一律不 seek
+        // （放在「可见性 + 保护区」判断之前，第二击挪出保护区也不能解除拦截）
+        if (seqDownOnControlArea) return true
+        // 是否可见用双击序列开始时的快照：控制条隐藏时底部就是纯画面，照常双击快进退
+        return seqControllerVisible && y >= controlsGuardTopOf(pv)
+    }
+
+    /** 控制条保护区顶边（playerView 局部坐标）：优先实测，控件还没挂上时按兜底高度算 */
+    private fun controlsGuardTopOf(pv: View): Float =
+        if (controlsGuardTop > 0f) controlsGuardTop else (pv.height - dp(CONTROLS_GUARD_DP)).toFloat()
+
+    /**
+     * 实测控制条保护区的顶边：进度条（含触摸热区）与底部栏里更靠上的那个。
+     * media3 的 id 由 AAR 资源合并进本包，用 getIdentifier 取，取不到就退回 100dp。
+     */
+    private fun measureControlsGuardTop(): Float {
+        val pv = binding.playerView
+        val pvLoc = IntArray(2)
+        pv.getLocationOnScreen(pvLoc)
+        var top = Int.MAX_VALUE
+        val names = arrayOf("exo_progress", "exo_progress_placeholder", "exo_bottom_bar")
+        for (name in names) {
+            val rid = resources.getIdentifier(name, "id", packageName)
+            if (rid == 0) continue
+            val v = pv.findViewById<View>(rid) ?: continue
+            if (v.visibility != View.VISIBLE) continue
+            val loc = IntArray(2)
+            v.getLocationOnScreen(loc)
+            top = min(top, loc[1] - pvLoc[1])
+        }
+        return if (top == Int.MAX_VALUE) (pv.height - dp(CONTROLS_GUARD_DP)).toFloat() else top.toFloat()
+    }
+
+    /**
+     * 找到落点处的进度条（exo_progress 优先，退到 exo_progress_placeholder）。
+     * 进度条不是 ImageButton，需要单独判定，否则它的「按下即 seek」会绕过双击守卫。
+     */
+    private fun findProgressBarAt(rawX: Float, rawY: Float): View? {
+        val pv = binding.playerView
+        val loc = IntArray(2)
+        for (name in arrayOf("exo_progress", "exo_progress_placeholder")) {
+            val rid = resources.getIdentifier(name, "id", packageName)
+            if (rid == 0) continue
+            val v = pv.findViewById<View>(rid) ?: continue
+            if (v.visibility != View.VISIBLE || v.width <= 0 || v.height <= 0) continue
+            v.getLocationOnScreen(loc)
+            if (rawX >= loc[0] && rawX <= loc[0] + v.width &&
+                rawY >= loc[1] && rawY <= loc[1] + v.height
+            ) {
+                return v
+            }
+        }
+        return null
+    }
+
+    /** 把进度条上的屏幕 x 换算成播放位置并 seek：单击补发与拖动共用同一套换算 */
+    private fun seekToProgressPoint(bar: View, rawX: Float) {
+        val p = player ?: return
+        val duration = p.duration
+        if (duration <= 0L || bar.width <= 0) return
+        val loc = IntArray(2)
+        bar.getLocationOnScreen(loc)
+        val ratio = ((rawX - loc[0]) / bar.width.toFloat()).coerceIn(0f, 1f)
+        p.seekTo((duration * ratio).toLong())
+    }
+
+    /**
+     * 找到落点处的控制条可点击控件。
+     *
+     * media3 控制条里的可点击项不止 ImageButton：快退/快进（exo_rew_with_amount /
+     * exo_ffwd_with_amount）是带「-10 / +15」文字的 Button，属于 TextView 系。
+     * 上一版只认 ImageButton，这两个按钮的双击既没被吞掉、又叠了一次 ±10s seek。
+     * 这里改成「控制条容器内、可点击的 TextView/ImageButton」通用判定，不按 id 硬编码，
+     * 齿轮/播放/上一个/下一个/字幕等同类控件一并覆盖。
+     */
+    private fun findControlButtonAt(rawX: Float, rawY: Float): View? {
+        val loc = IntArray(2)
+        return findClickableControl(binding.playerView, rawX, rawY, loc)
+    }
+
+    /** 控制条容器 id：用来把「控制条」与播放器里的其它可点击控件区分开 */
+    private val controlContainerIds: Set<Int> by lazy {
+        listOf(
+            "exo_center_controls",
+            "exo_bottom_bar",
+            "exo_basic_controls",
+            "exo_extra_controls",
+            "exo_minimal_controls",
+            "exo_time"
+        ).mapNotNull { name ->
+            resources.getIdentifier(name, "id", packageName).takeIf { it != 0 }
+        }.toSet()
+    }
+
+    private fun findClickableControl(v: View, rawX: Float, rawY: Float, loc: IntArray): View? {
+        if (v.visibility != View.VISIBLE) return null
+        if (v is ViewGroup) {
+            for (i in v.childCount - 1 downTo 0) {
+                val found = findClickableControl(v.getChildAt(i), rawX, rawY, loc)
+                if (found != null) return found
+            }
+            return null
+        }
+        // ImageButton 是 ImageView 子类，Button 是 TextView 子类，两族都要覆盖
+        val isClickableType = v is android.widget.ImageButton || v is android.widget.TextView
+        if (!isClickableType || !v.isClickable || !v.isEnabled) return null
+        // 只认挂在控制条容器内的控件：顶栏标题/返回、弹幕条等可点击文字不会被误吞
+        if (controlContainerIds.isNotEmpty() && !isInsideControls(v, binding.playerView)) return null
+        v.getLocationOnScreen(loc)
+        return if (rawX >= loc[0] && rawX <= loc[0] + v.width && rawY >= loc[1] && rawY <= loc[1] + v.height) v else null
+    }
+
+    /** 沿父链确认控件在控制条容器里；走到 PlayerView 根仍未命中即判定不在控制条内 */
+    private fun isInsideControls(v: View, root: View): Boolean {
+        var p: android.view.ViewParent? = v.parent
+        while (p is View) {
+            if (p === root) return false
+            if (p.id != View.NO_ID && p.id in controlContainerIds) return true
+            p = (p as View).parent
+        }
         return false
     }
 
@@ -713,6 +1056,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun releasePlayer() {
         handler.removeCallbacks(firstFrameWatchdog)
+        playbackJob?.cancel()
+        playbackJob = null
         binding.playerView.player = null
         player?.release()
         player = null
@@ -839,6 +1184,8 @@ class PlayerActivity : AppCompatActivity() {
         historyJob = null
         viewersJob?.cancel()
         viewersJob = null
+        recoverJob?.cancel()
+        recoverJob = null
     }
 
     // ==================== 关注 / 画质 / 相关 ====================
@@ -875,7 +1222,8 @@ class PlayerActivity : AppCompatActivity() {
                 currentQualityUrl = q.url
                 binding.tvQuality.text = "清晰度：${q.label}"
                 val pos = player?.currentPosition ?: 0
-                startPlayback(v, pos)
+                // 用户主动换档：重新给一个完整首帧窗口
+                startPlayback(v, pos, FIRST_FRAME_TIMEOUT_MS)
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)

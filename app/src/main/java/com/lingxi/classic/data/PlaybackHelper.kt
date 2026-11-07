@@ -58,10 +58,16 @@ object PlaybackHelper {
     }
 
     /** 生成最终播放源（含节点拼接 + X-Forwarded-For 头） */
-    suspend fun buildPlaySource(context: Context, video: Video, qualityUrl: String? = null): PlaySource {
+    suspend fun buildPlaySource(
+        context: Context,
+        video: Video,
+        qualityUrl: String? = null,
+        /** 降档重开时跳过节点授权：本次链路已确认授权失败，直连主站避免再等一轮超时 */
+        skipNodeHandoff: Boolean = false
+    ): PlaySource {
         // 节点授权失败（换了 IP / 授权过期）就回落主站：
         // 节点只影响请求地址，不能把节点侧故障放大成播放失败，更不能因此动账号会话
-        val direct = usingDirectNode() && ensureNodeGranted()
+        val direct = !skipNodeHandoff && usingDirectNode() && ensureNodeGranted()
         val base = if (direct) AuthManager.nodeUrl!!.trimEnd('/') else ApiClient.BASE_URL
         var url = joinUrl(base, qualityUrl ?: video.src)
 

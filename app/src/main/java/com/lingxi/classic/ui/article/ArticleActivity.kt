@@ -42,6 +42,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * 阅读页：kind=article（Markdown 正文）与 kind=audio（精简音频播放条）共用。
@@ -69,7 +70,7 @@ class ArticleActivity : AppCompatActivity() {
 
     companion object {
         private const val SEEK_STEP_MS = 15_000L
-        private val SPEED_OPTIONS = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+        private val SPEED_OPTIONS = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
         // 音频播放器偏好（全局共享，不按稿件区分）
         private const val PREFS_NAME = "lingxi_audio_prefs"
@@ -305,8 +306,14 @@ class ArticleActivity : AppCompatActivity() {
     }
 
     private fun cycleSpeed() {
-        val idx = SPEED_OPTIONS.indexOfFirst { it == playbackSpeed }
-        playbackSpeed = SPEED_OPTIONS[((if (idx < 0) 0 else idx) + 1) % SPEED_OPTIONS.size]
+        // 存值可能不在固定档位表里（例如旧版本写入的 0.5x）：匹配不上也要按原值继续，
+        // 取「比当前值大的最近一档」，找不到才回最小档，不能把存值当默认值丢掉
+        val idx = SPEED_OPTIONS.indexOfFirst { abs(it - playbackSpeed) < 0.001f }
+        playbackSpeed = if (idx >= 0) {
+            SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.size]
+        } else {
+            SPEED_OPTIONS.firstOrNull { it > playbackSpeed } ?: SPEED_OPTIONS.first()
+        }
         audioPlayer?.setPlaybackSpeed(playbackSpeed)
         audioPrefs.edit().putFloat(KEY_PLAYBACK_SPEED, playbackSpeed).apply()
         renderSpeed()
@@ -314,6 +321,7 @@ class ArticleActivity : AppCompatActivity() {
 
     private fun renderSpeed() {
         binding.btnSpeed.text = when (playbackSpeed) {
+            0.5f -> "0.5x"
             1.0f -> "1.0x"
             1.5f -> "1.5x"
             2.0f -> "2.0x"
