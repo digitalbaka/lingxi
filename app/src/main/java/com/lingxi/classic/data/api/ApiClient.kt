@@ -73,6 +73,9 @@ object ApiClient {
     /** 续期失败后的预热退避窗口，避免失败风暴 */
     private const val WARMUP_BACKOFF_MS = 30_000L
 
+    /** 门禁 403 响应体探测上限：正常只有一两百字节的 JSON，足够大又不会把大响应读进内存 */
+    private const val GATE_PEEK_BYTES = 32L * 1024L
+
     /**
      * 容错 String 适配器：个别接口把 `data.message` 返回成对象（如私信发送返回消息实体），
      * 而 DTO 中该字段声明为 String。严格反序列化会抛 JsonSyntaxException，使「已发送成功」
@@ -285,6 +288,28 @@ object ApiClient {
                     response.close()
                     Thread.sleep(600L * attempt)
                     response = chain.proceed(request)
+                }
+                response
+            }
+            // 两步验证门禁：HTTP 403 且 data.code === "TOTP_REQUIRED"（封禁也是 403，只能认 data.code）。
+            // 命中后交给 TotpGate 跳账号安全页；响应体只 peek 不消费，Retrofit 仍按原流程处理。
+            .addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (response.code == 403) {
+                    try {
+                        val text = response.peekBody(GATE_PEEK_BYTES).string()
+                        if (text.contains("\"TOTP_REQUIRED\"")) {
+                            val data = gson.fromJson(text, com.google.gson.JsonObject::class.java)
+                                ?.getAsJsonObject("data")
+                            val deadline = data?.get("deadline")
+                                ?.takeIf { it.isJsonPrimitive }?.asLong ?: 0L
+                            val daysLeft = data?.get("daysLeft")
+                                ?.takeIf { it.isJsonPrimitive }?.asInt ?: 0
+                            TotpGate.notifyRequired(deadline, daysLeft)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "parse 403 gate body failed: ${e.message}")
+                    }
                 }
                 response
             }

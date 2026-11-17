@@ -39,6 +39,9 @@ class SvgCaptchaView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
+    /** 解析失败/空内容时的占位文案（绑定认证器时复用本 View 渲染二维码，文案需不同） */
+    var emptyHint: String = "点击刷新验证码"
+
     /** 设置 SVG 字符串；null/空/解析失败 → 显示占位文字 */
     fun setSvg(svg: String?) {
         shapes.clear()
@@ -67,7 +70,7 @@ class SvgCaptchaView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (parseFailed) {
-            canvas.drawText("点击刷新验证码", width / 2f, height / 2f + fallbackPaint.textSize / 3f, fallbackPaint)
+            canvas.drawText(emptyHint, width / 2f, height / 2f + fallbackPaint.textSize / 3f, fallbackPaint)
             return
         }
         // 以实际内容包围盒适配：验证码字符只占 viewBox 中间窄条，按 viewBox 适配会留出大量空白、字符过小

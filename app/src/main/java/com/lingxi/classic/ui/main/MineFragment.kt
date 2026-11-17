@@ -30,6 +30,7 @@ import com.lingxi.classic.ui.auth.LoginActivity
 import com.lingxi.classic.ui.message.MessageActivity
 import com.lingxi.classic.ui.node.NodeSelectActivity
 import com.lingxi.classic.ui.settings.SettingsActivity
+import com.lingxi.classic.ui.settings.SecurityActivity
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.dp
@@ -335,6 +336,9 @@ class MineFragment : Fragment() {
             MenuItem(R.drawable.ic_menu_favorite, "我的收藏") { openVideoList("favorites") },
             MenuItem(R.drawable.ic_menu_profile, "个人资料编辑") { showProfileEditDialog() },
             MenuItem(R.drawable.ic_menu_password, "修改密码") { showChangePasswordDialog() },
+            MenuItem(R.drawable.ic_menu_security, "账号安全（两步验证）") {
+                startActivity(Intent(ctx, SecurityActivity::class.java))
+            },
             MenuItem(R.drawable.ic_menu_node, "节点选择", needLogin = false,
                 subtitle = { AuthManager.nodeName ?: "主站" }) {
                 startActivity(Intent(ctx, NodeSelectActivity::class.java))

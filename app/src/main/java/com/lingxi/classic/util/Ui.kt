@@ -43,6 +43,31 @@ fun Throwable.errorMessageRes(): Int = when {
 /** 按异常类型给出可读提示（只提示，不清理会话） */
 fun Context.toastError(error: Throwable) = toast(getString(error.errorMessageRes()))
 
+/**
+ * 取服务端错误文案。
+ *
+ * 站点的 HTTP 状态码与业务 code 一致（400/403/...），Retrofit 遇到非 2xx 直接抛 HttpException，
+ * 此时统一信封里的 message（如「验证码不正确或已过期」「这个验证码刚刚已经用过了，请等下一个」）
+ * 只在 errorBody 里。不解析就只能给用户看「网络异常」，两步验证的失败提示会全部失真。
+ */
+fun Throwable.apiMessage(fallback: String = "请求失败，请稍后重试"): String {
+    if (this !is retrofit2.HttpException) return fallback
+    return try {
+        val body = response()?.errorBody()?.string()
+        val node = if (body.isNullOrBlank()) {
+            null
+        } else {
+            com.lingxi.classic.data.api.ApiClient.gson
+                .fromJson(body, com.google.gson.JsonObject::class.java)
+                ?.get("message")
+        }
+        val msg = if (node != null && node.isJsonPrimitive) node.asString else null
+        if (msg.isNullOrBlank()) fallback else msg
+    } catch (e: Exception) {
+        fallback
+    }
+}
+
 /** API 返回体统一处理：code!=0 时吐 message 并返回 null */
 fun <T> com.lingxi.classic.data.model.ApiResponse<T>.unwrap(context: Context? = null): T? {
     if (isSuccess) return data
