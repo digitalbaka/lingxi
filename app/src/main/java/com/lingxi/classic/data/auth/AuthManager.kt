@@ -21,6 +21,7 @@ object AuthManager {
     private const val KEY_DEVICE_ID = "device_id"
     private const val KEY_NODE_GRANTED_IP = "node_granted_ip"
     private const val KEY_EXPIRES_AT = "expires_at"
+    private const val KEY_DEVICE_TOKEN = "device_token"
 
     /** 提前续期窗口：accessToken 到期前 60 秒开始续期 */
     private const val ACCESS_TOKEN_SKEW_MS = 60_000L
@@ -37,6 +38,14 @@ object AuthManager {
     var refreshToken: String?
         get() = prefs.getString(KEY_REFRESH_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
+
+    /**
+     * 可信设备令牌：下次登录时回传给 /auth/login，让「邮箱二次验证」这条存量路径跳过验证。
+     * 绑定了认证器（TOTP）的账号服务端不认它，每次登录仍须输码。
+     */
+    var deviceToken: String?
+        get() = prefs.getString(KEY_DEVICE_TOKEN, null)
+        set(value) = prefs.edit().putString(KEY_DEVICE_TOKEN, value).apply()
 
     var user: User?
         get() {
@@ -112,12 +121,15 @@ object AuthManager {
         newToken: String,
         newUser: User,
         newRefreshToken: String? = null,
-        expiresAtMs: Long? = null
+        expiresAtMs: Long? = null,
+        newDeviceToken: String? = null
     ) {
         token = newToken
         // refresh 是轮换令牌，且并非每个登录/改密响应都会返回它；
         // 传 null 时保留已有值，否则会把可用的续期凭证抹掉，下一次 401 就只能重登
         if (!newRefreshToken.isNullOrBlank()) refreshToken = newRefreshToken
+        // deviceToken 同上：响应没给就保留上次的，避免把仍可用的设备信任抹掉
+        if (!newDeviceToken.isNullOrBlank()) deviceToken = newDeviceToken
         user = newUser
         // 过期时间随 accessToken 一起更新；响应没给就置空，避免拿着旧时间戳误触发续期
         expiresAt = expiresAtMs

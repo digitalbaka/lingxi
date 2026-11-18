@@ -6,12 +6,13 @@ data class Captcha(
     val svg: String = ""
 )
 
+/** deviceToken：上次验证成功后服务端下发的可信设备令牌（仅对未绑定认证器的账号生效） */
 data class LoginRequest(val username: String, val password: String, val deviceToken: String = "")
 
 /**
  * 登录响应。站点强制两步验证：
  * 成功 → accessToken + refreshToken + user
- * 需 2FA → mfaRequired=true + mfaTicket + emailMasked
+ * 需 2FA → mfaRequired=true + mfaTicket + mfaMethod(totp/email) + emailMasked
  */
 data class LoginResult(
     val accessToken: String? = null,
@@ -19,13 +20,76 @@ data class LoginResult(
     val deviceToken: String? = null,
     val user: User? = null,
     val mfaRequired: Boolean = false,
+    val mfaMethod: String? = null,
     val mfaTicket: String? = null,
     val emailMasked: String? = null,
     val canUseRecovery: Boolean = false,
+    val twoFactor: TwoFactorStatus? = null,
     // 过期时间字段名/单位未取证：用 JsonElement 接收任意形态，避免类型不符让整段响应解析失败
     val expiresAt: com.google.gson.JsonElement? = null,
     val expireTime: com.google.gson.JsonElement? = null,
     val expiresIn: com.google.gson.JsonElement? = null
+)
+
+/**
+ * 站点两步验证状态（auth/login、auth/verify-2fa、auth/refresh、auth/me 的 data.twoFactor）。
+ * blocked=true 表示宽限期已过且本人未绑定认证器，业务接口会被门禁拦下。
+ */
+data class TwoFactorStatus(
+    val enabled: Boolean = false,
+    val required: Boolean = false,
+    val deadline: Long = 0,
+    val graceDays: Int = 0,
+    val daysLeft: Int = 0,
+    val blocked: Boolean = false
+)
+
+/** GET /users/me/totp：同 TwoFactorStatus + 剩余恢复码数量 */
+data class TotpStatus(
+    val enabled: Boolean = false,
+    val required: Boolean = false,
+    val deadline: Long = 0,
+    val graceDays: Int = 0,
+    val daysLeft: Int = 0,
+    val blocked: Boolean = false,
+    val recoveryRemaining: Int = 0
+)
+
+/** POST /users/me/totp/setup：qr 是原始 SVG 源码（不是图片地址），secret 供手输 */
+data class TotpSetupResult(
+    val secret: String = "",
+    val uri: String = "",
+    val qr: String = "",
+    val digits: Int = 6,
+    val period: Int = 30,
+    val issuer: String = "",
+    val account: String = ""
+) {
+    /** 密钥按 4 位分组，便于用户对着 App 手输 */
+    val secretGrouped: String
+        get() = secret.chunked(4).joinToString(" ")
+}
+
+/** POST /users/me/totp/enable：codes 是 8 个一次性恢复码，明文只在这里出现一次 */
+data class TotpEnableResult(
+    val enabled: Boolean = false,
+    val codes: List<String>? = null,
+    val recoveryRemaining: Int = 0
+)
+
+/** POST /users/me/totp/disable */
+data class TotpDisableResult(val enabled: Boolean = false)
+
+/** GET /users/me/recovery-codes：只给剩余数量 */
+data class RecoveryCodeStatus(
+    val remaining: Int = 0,
+    val email: String = ""
+)
+
+/** POST /users/me/recovery-codes：旧的一批立即失效，明文只出现一次 */
+data class RecoveryCodesResult(
+    val codes: List<String>? = null,
+    val remaining: Int = 0
 )
 
 /**

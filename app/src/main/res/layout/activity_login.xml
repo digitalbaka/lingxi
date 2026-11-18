@@ -77,6 +77,7 @@
             android:visibility="gone">
 
             <TextView
+                android:id="@+id/tv2faTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="两步验证"
@@ -92,8 +93,9 @@
                 android:textColor="@color/lx_text_sub"
                 android:textSize="13sp" />
 
-            <!-- 图形验证码：发邮箱验证码前需要 -->
+            <!-- 图形验证码：仅邮箱验证码路径需要；TOTP / 恢复码路径隐藏 -->
             <LinearLayout
+                android:id="@+id/groupCaptcha"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -127,6 +129,7 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/tvCaptchaHint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
@@ -181,6 +184,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
+                android:checked="true"
                 android:text="记住这台设备，下次登录免验证"
                 android:textColor="@color/lx_text"
                 android:textSize="13sp" />

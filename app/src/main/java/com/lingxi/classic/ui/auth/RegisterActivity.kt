@@ -131,7 +131,10 @@ class RegisterActivity : AppCompatActivity() {
                 val result = resp.data
                 if (resp.isSuccess) {
                     if (result?.accessToken != null && result.user != null) {
-                        AuthManager.saveLogin(result.accessToken, result.user, result.refreshToken, result.expiresAtMillis())
+                        AuthManager.saveLogin(
+                            result.accessToken, result.user, result.refreshToken,
+                            result.expiresAtMillis(), result.deviceToken
+                        )
                     }
                     toast("注册成功，欢迎来到凌汐")
                     finish()

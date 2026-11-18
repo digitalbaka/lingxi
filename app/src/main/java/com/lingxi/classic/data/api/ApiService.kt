@@ -36,10 +36,10 @@ interface ApiService {
     suspend fun getAds(@Query("position") position: String = "home"): ApiResponse<ItemList<AdItem>>
 
     @POST("/api/v1/promotions/{type}/{id}/impression")
-    suspend fun reportPromotionImpression(@Path("type") type: String, @Path("id") id: Long): ApiResponse<ActionResult>
+    suspend fun reportPromotionImpression(@Path("type") type: String, @Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<ActionResult>
 
     @POST("/api/v1/promotions/{type}/{id}/click")
-    suspend fun reportPromotionClick(@Path("type") type: String, @Path("id") id: Long): ApiResponse<ActionResult>
+    suspend fun reportPromotionClick(@Path("type") type: String, @Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<ActionResult>
 
     @GET("/api/v1/videos/pinned")
     suspend fun getPinned(@Query("limit") limit: Int = 12): ApiResponse<ItemList<Video>>
@@ -111,7 +111,7 @@ interface ApiService {
     suspend fun sendComment(@Path("id") id: Long, @Body body: CommentSendRequest): ApiResponse<ActionResult>
 
     @POST("/api/v1/comments/{id}/like")
-    suspend fun likeComment(@Path("id") id: Long): ApiResponse<CommentLikeResult>
+    suspend fun likeComment(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<CommentLikeResult>
 
     @POST("/api/v1/comments/{id}/pin")
     suspend fun pinComment(@Path("id") id: Long, @Body body: PinRequest): ApiResponse<ActionResult>
@@ -122,7 +122,7 @@ interface ApiService {
     // ==================== 互动 ====================
 
     @POST("/api/v1/videos/{id}/like")
-    suspend fun likeVideo(@Path("id") id: Long): ApiResponse<LikeResult>
+    suspend fun likeVideo(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<LikeResult>
 
     @POST("/api/v1/videos/{id}/coin")
     suspend fun coinVideo(@Path("id") id: Long, @Body body: CoinRequest): ApiResponse<CoinResult>
@@ -186,7 +186,7 @@ interface ApiService {
     ): ApiResponse<PageData<Video>>
 
     @POST("/api/v1/users/{id}/follow")
-    suspend fun followUser(@Path("id") uid: Long): ApiResponse<FollowResult>
+    suspend fun followUser(@Path("id") uid: Long, @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<FollowResult>
 
     @GET("/api/v1/users/{id}/followers")
     suspend fun getFollowers(@Path("id") uid: Long, @Query("page") page: Int = 1): ApiResponse<PageData<UserInfo>>
@@ -200,8 +200,9 @@ interface ApiService {
     @GET("/api/v1/users/recommend")
     suspend fun getRecommendedUps(@Query("limit") limit: Int = 10): ApiResponse<ItemList<UserInfo>>
 
+    /** 签到：无参数也要提交空对象 {}，否则反代会改写为表单请求导致 415 */
     @POST("/api/v1/users/me/checkin")
-    suspend fun checkin(): ApiResponse<CheckinResult>
+    suspend fun checkin(@Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<CheckinResult>
 
     @GET("/api/v1/users/me/coins")
     suspend fun getMyCoins(): ApiResponse<CoinsOverview>
@@ -248,6 +249,34 @@ interface ApiService {
 
     @POST("/api/v1/auth/logout")
     suspend fun logout(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>
+
+    // ==================== 两步验证：认证器（TOTP）/ 恢复码 ====================
+
+    /** 绑定状态 + 站点强制策略 + 剩余恢复码（门禁被拦时仍放行） */
+    @GET("/api/v1/users/me/totp")
+    suspend fun getTotpStatus(): ApiResponse<TotpStatus>
+
+    /** 开始绑定：需要当前密码，返回二维码 SVG 源码与 base32 密钥（此时还没生效） */
+    @POST("/api/v1/users/me/totp/setup")
+    suspend fun setupTotp(@Body body: Map<String, @JvmSuppressWildcards String>): ApiResponse<TotpSetupResult>
+
+    /** 确认绑定：提交 6 位码，响应里带 8 个一次性恢复码（明文只出现这一次） */
+    @POST("/api/v1/users/me/totp/enable")
+    suspend fun enableTotp(@Body body: Map<String, @JvmSuppressWildcards String>): ApiResponse<TotpEnableResult>
+
+    /** 解绑：密码 + 一枚有效验证码，双条件缺一不可 */
+    @POST("/api/v1/users/me/totp/disable")
+    suspend fun disableTotp(@Body body: Map<String, @JvmSuppressWildcards String>): ApiResponse<TotpDisableResult>
+
+    /** 查剩余恢复码数量（不返回码本身） */
+    @GET("/api/v1/users/me/recovery-codes")
+    suspend fun getRecoveryCodes(): ApiResponse<RecoveryCodeStatus>
+
+    /** 重新生成一批恢复码：旧的一批立即失效 */
+    @POST("/api/v1/users/me/recovery-codes")
+    suspend fun regenerateRecoveryCodes(
+        @Body body: Map<String, @JvmSuppressWildcards String>
+    ): ApiResponse<RecoveryCodesResult>
 
     // ==================== 节点 ====================
 
@@ -325,7 +354,7 @@ interface ApiService {
     suspend fun deleteVideo(@Path("id") id: Long): ApiResponse<ActionResult>
 
     @POST("/api/v1/videos/{id}/nudge")
-    suspend fun nudgeReview(@Path("id") id: Long): ApiResponse<ActionResult>
+    suspend fun nudgeReview(@Path("id") id: Long, @Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<ActionResult>
 
     // ==================== 举报 ====================
 
@@ -455,7 +484,7 @@ interface ApiService {
     suspend fun getAdminStorage(@Query("deep") deep: Int = 0): ApiResponse<AdminStorage>
 
     @POST("/api/v1/admin/storage/rescan")
-    suspend fun rescanStorage(): ApiResponse<ActionResult>
+    suspend fun rescanStorage(@Body body: Map<String, @JvmSuppressWildcards Any> = emptyMap()): ApiResponse<ActionResult>
 
     @PUT("/api/v1/admin/storage/settings")
     suspend fun updateStorageSettings(@Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ActionResult>

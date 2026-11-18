@@ -83,6 +83,10 @@
 
         <activity android:name=".ui.settings.SettingsActivity" />
 
+        <activity
+            android:name=".ui.settings.SecurityActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity android:name=".ui.node.NodeSelectActivity" />
     </application>
 </manifest>
