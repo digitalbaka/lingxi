@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.media.MediaCodec
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -36,6 +37,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -56,8 +58,11 @@ import com.lingxi.classic.data.model.displayName
 import com.lingxi.classic.databinding.ActivityPlayerBinding
 import com.lingxi.classic.databinding.DialogDanmakuSettingsBinding
 import com.lingxi.classic.databinding.ItemPlayerRelatedBinding
+import com.lingxi.classic.player.BackgroundAudioService
 import com.lingxi.classic.player.ButtonSizeSettings
 import com.lingxi.classic.player.DanmakuSettings
+import com.lingxi.classic.player.OfflineCacheManager
+import com.lingxi.classic.player.PlaybackPrefs
 import com.lingxi.classic.player.VideoCacheManager
 import com.lingxi.classic.ui.common.CommentsController
 import com.lingxi.classic.ui.common.InteractionBar
@@ -115,7 +120,11 @@ class PlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var video: Video? = null
     private var videoId: Long = 0
+    /** 只播本地：入口参数 Navigator.EXTRA_LOCAL_ONLY，命中缓存后不发起任何网络请求 */
+    private var localOnly = false
     private var playUrl: String = ""
+    /** 与 playUrl 配套的请求头（节点鉴权等），后台音频交接与离线缓存都要复用 */
+    private var playHeaders: Map<String, String> = emptyMap()
     private var currentQualityUrl: String? = null
     private var retriedAfterRecover = false
     /** 节点重授权重试任务：到点降档时要能中断它，避免两条链路各起一次播放 */
@@ -212,7 +221,8 @@ class PlayerActivity : AppCompatActivity() {
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             binding.danmakuView.setPlaying(isPlaying)
-            if (isPlaying) armViewReport()
+            // 只播本地不上报播放量
+            if (isPlaying && !localOnly) armViewReport()
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -265,19 +275,25 @@ class PlayerActivity : AppCompatActivity() {
             finish()
             return
         }
+        localOnly = intent.getBooleanExtra(Navigator.EXTRA_LOCAL_ONLY, false)
         initViews()
-        loadVideo(videoId)
+        if (localOnly) loadLocalVideo() else loadVideo(videoId)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val id = intent.getLongExtra(Navigator.EXTRA_VIDEO_ID, 0)
-        if (id > 0 && id != videoId) loadVideo(id)
+        if (id > 0 && id != videoId) {
+            videoId = id
+            localOnly = intent.getBooleanExtra(Navigator.EXTRA_LOCAL_ONLY, false)
+            if (localOnly) loadLocalVideo() else loadVideo(id)
+        }
     }
 
     private fun initViews() {
         binding.btnBack.setOnClickListener { onBack() }
         binding.btnFullscreen.setOnClickListener { toggleFullscreen() }
+        binding.btnCache.setOnClickListener { cacheCurrentVideo() }
         binding.btnQualityFs.setOnClickListener {
             video?.let { v -> if (v.qualityOptions.size > 1) showQualityDialog(v) else toast("该视频只有一个清晰度") }
         }
@@ -376,6 +392,91 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 只播本地：只查离线缓存索引拿标题，不请求详情/弹幕/评论/相关推荐，直接起播本地文件。
+     * 索引里没有这条（文件被删）就退出，不回退到网络播放。
+     */
+    private fun loadLocalVideo() {
+        val entry = OfflineCacheManager.find(
+            this, OfflineCacheManager.keyOf(videoId, OfflineCacheManager.KIND_VIDEO)
+        )
+        if (entry == null) {
+            toast("本地缓存不存在，可能已被删除")
+            finish()
+            return
+        }
+        val v = Video(
+            id = entry.videoId,
+            title = entry.title,
+            cover = entry.cover,
+            kind = OfflineCacheManager.KIND_VIDEO
+        )
+        video = v
+        bindLocalDetail(v)
+        // 与 loadVideo 一致：首帧窗口从进入本页起算，否则看门狗会立刻触发
+        firstFrameDeadlineMs = SystemClock.elapsedRealtime() + FIRST_FRAME_TIMEOUT_MS
+        startPlayback(v)
+    }
+
+    /**
+     * 只播本地的详情区：详情、弹幕、UP 信息都拿不到，控件保留并置灰，不隐藏、不空白。
+     * 相关推荐与清晰度切换依赖详情接口，本地单文件没有这两类信息，直接隐藏。
+     */
+    private fun bindLocalDetail(v: Video) {
+        binding.tvTitle.text = v.title
+        binding.tvTopTitle.text = v.title
+        binding.tvMeta.text = "离线播放 · 详情暂不可用"
+        binding.tvMeta.alpha = 0.5f
+        binding.tvViewers.visible = false
+
+        // 弹幕：保留输入条位置，禁用发送
+        binding.danmakuBar.alpha = 0.5f
+        binding.etDanmaku.isEnabled = false
+        binding.etDanmaku.hint = "离线播放不支持发弹幕"
+        binding.btnSendDanmaku.isEnabled = false
+        binding.btnDanmakuToggle.isEnabled = false
+        binding.btnDanmakuSettings.isEnabled = false
+
+        // UP 信息：头像占位、名字置灰、关注不可点
+        binding.ivUpAvatar.alpha = 0.5f
+        binding.ivUpAvatar.setOnClickListener(null)
+        binding.tvUpName.text = "UP主信息不可用"
+        binding.tvUpName.alpha = 0.5f
+        binding.tvUpName.setOnClickListener(null)
+        binding.btnFollow.visible = true
+        binding.btnFollow.alpha = 0.5f
+        binding.btnFollow.isEnabled = false
+
+        // 简介位置保留，写明离线不加载
+        binding.tvDesc.visible = true
+        binding.tvDesc.alpha = 0.5f
+        binding.tvDesc.text = "离线播放：简介、相关推荐与评论需要联网，当前未加载"
+        binding.tvDesc.setOnClickListener(null)
+        binding.tvDescToggle.visible = false
+
+        // 互动栏与评论区：置灰且整体不可点，避免误触发起网络请求
+        binding.interactionBar.root.alpha = 0.4f
+        disableAll(binding.interactionBar.root)
+        binding.commentInput.root.alpha = 0.4f
+        disableAll(binding.commentInput.root)
+        binding.rvComments.alpha = 0.4f
+
+        binding.tvRelatedTitle.visible = false
+        binding.rvRelated.visible = false
+        binding.tvQuality.visible = false
+        binding.btnQualityFs.visible = false
+
+        refreshCacheButton()
+    }
+
+    /** 递归设为不可用：置灰后的按钮不再响应点击，也就不会发起请求 */
+    private fun disableAll(view: View) {
+        view.isEnabled = false
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) disableAll(view.getChildAt(i))
+        }
+    }
+
     /** progress 登录时是对象，游客可能是数字，解析前判断类型 */
     private fun parseProgressMs(progress: Any?): Long {
         val map = progress as? Map<*, *> ?: return 0
@@ -393,6 +494,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun bindDetail(v: Video, followingUp: Boolean) {
         binding.tvTitle.text = v.title
         binding.tvTopTitle.text = v.title
+        refreshCacheButton()
         renderMeta()
 
         following = followingUp
@@ -472,6 +574,11 @@ class PlayerActivity : AppCompatActivity() {
         /** 降档重开时跳过节点授权：本次播放链路已经确认授权失败，再等它只会把出画时间往后拖 */
         skipNodeHandoff: Boolean = false
     ) {
+        // 回到页面时若后台服务在播同一条内容：取回进度并停掉服务，再从该进度继续
+        val bgPos = BackgroundAudioService.takePosition(this, playUrl, v.id)
+        // 换内容时先掐掉可能还在后台响的上一条音频，避免两路同时出声
+        BackgroundAudioService.stop(this)
+        val startAt = bgPos ?: resumeMs
         releasePlayer()
         firstFrameRendered = false
         if (resetFirstFrameWindowMs > 0L) {
@@ -482,13 +589,33 @@ class PlayerActivity : AppCompatActivity() {
         playbackJob?.cancel()
         playbackJob = lifecycleScope.launch {
             try {
-                val ps = PlaybackHelper.buildPlaySource(this@PlayerActivity, v, currentQualityUrl, skipNodeHandoff)
+                // 先看本地是否有整文件缓存：命中就直接读文件，连建源（节点授权/拉流）都不发起，
+                // 断网点缓存条目也能播；未命中才走原有的拉流链路
+                val local = OfflineCacheManager.localFile(this@PlayerActivity, v.id, OfflineCacheManager.KIND_VIDEO)
+                val url: String
+                var headers: Map<String, String> = emptyMap()
+                if (local != null) {
+                    url = Uri.fromFile(local).toString()
+                } else if (localOnly) {
+                    // 只播本地分支下文件恰好被删：直接退出，绝不回退到网络拉流
+                    toast("本地缓存文件不存在")
+                    return@launch
+                } else {
+                    val ps = PlaybackHelper.buildPlaySource(this@PlayerActivity, v, currentQualityUrl, skipNodeHandoff)
+                    url = ps.url
+                    headers = ps.headers
+                }
                 // 建源期间若已被降档/切清晰度/离开页面打断，不要再建这台播放器
                 if (!isActive) return@launch
-                playUrl = ps.url
-                val factory = VideoCacheManager.cacheDataSourceFactory(this@PlayerActivity, ps.headers)
-                val item = MediaItem.fromUri(ps.url)
-                val source = if (ps.url.contains(".m3u8"))
+                playUrl = url
+                playHeaders = headers
+                val factory = if (local != null) {
+                    DefaultDataSource.Factory(this@PlayerActivity)
+                } else {
+                    VideoCacheManager.cacheDataSourceFactory(this@PlayerActivity, headers)
+                }
+                val item = MediaItem.fromUri(playUrl)
+                val source = if (playUrl.contains(".m3u8"))
                     HlsMediaSource.Factory(factory).createMediaSource(item)
                 else
                     ProgressiveMediaSource.Factory(factory).createMediaSource(item)
@@ -502,15 +629,15 @@ class PlayerActivity : AppCompatActivity() {
                     .build()
                 binding.playerView.player = p
                 p.setMediaSource(source)
-                if (resumeMs > 0) p.seekTo(resumeMs)
+                if (startAt > 0) p.seekTo(startAt)
                 p.prepare()
                 p.playWhenReady = true
                 p.addListener(playerListener)
                 player = p
 
-                if (resumeMs > 0) {
-                    binding.danmakuView.seekTo(resumeMs)
-                    toast("上次看到 ${FormatUtils.formatDurationMs(resumeMs)}")
+                if (startAt > 0) {
+                    binding.danmakuView.seekTo(startAt)
+                    toast("上次看到 ${FormatUtils.formatDurationMs(startAt)}")
                 }
                 handler.removeCallbacks(danmakuTicker)
                 handler.post(danmakuTicker)
@@ -525,6 +652,11 @@ class PlayerActivity : AppCompatActivity() {
     /** 播放失败：先清毒缓存 + 重新节点授权重试一次（节点问题换档没用），仍失败则自动降档；降无可降才报错 */
     private fun onPlayError(error: PlaybackException) {
         binding.loadingBar.visible = false
+        // 本地文件不走节点，也没有别的清晰度可降：重授权/降档都救不回来，也不该再发请求
+        if (localOnly) {
+            toast("本地文件播放失败：${error.localizedMessage ?: "文件可能已损坏"}")
+            return
+        }
         // 解码器/格式不支持与节点无关：重授权救不回来，直接降档，不白等一轮节点重试
         if (isCodecFailure(error)) {
             onQualityUnplayable(error)
@@ -1423,6 +1555,74 @@ class PlayerActivity : AppCompatActivity() {
         imm.hideSoftInputFromWindow(binding.rootLayout.windowToken, 0)
     }
 
+    // ==================== 离线缓存 ====================
+
+    /** 缓存状态观察者：只在页面可见期间注册，回调不再绑定发起下载的 Activity 实例 */
+    private val cacheListener = object : OfflineCacheManager.Listener {
+        override fun onProgress(key: String, pct: Int) {
+            val v = video ?: return
+            if (key != OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_VIDEO)) return
+            binding.btnCache.text = "缓存 $pct%"
+        }
+
+        override fun onFinished(key: String, ok: Boolean, message: String) {
+            val v = video ?: return
+            if (key != OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_VIDEO)) return
+            // 完成/失败都统一从索引重算按钮状态
+            refreshCacheButton()
+            toast(if (ok) "已缓存到本地，可在设置里管理" else "缓存失败：$message")
+        }
+    }
+
+    private fun refreshCacheButton() {
+        val v = video ?: return
+        val key = OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_VIDEO)
+        binding.btnCache.text = when {
+            OfflineCacheManager.localFile(this, v.id, OfflineCacheManager.KIND_VIDEO) != null -> "已缓存"
+            OfflineCacheManager.isRunning(key) -> "缓存 ${OfflineCacheManager.progressOf(key)}%"
+            else -> "缓存"
+        }
+    }
+
+    private fun cacheCurrentVideo() {
+        val v = video ?: return
+        if (OfflineCacheManager.localFile(this, v.id, OfflineCacheManager.KIND_VIDEO) != null) {
+            toast("已缓存到本地")
+            refreshCacheButton()
+            return
+        }
+        if (playUrl.isBlank()) {
+            toast("视频还没加载好，稍后再试")
+            return
+        }
+        if (playUrl.startsWith("file://")) {
+            toast("该视频已在本地")
+            refreshCacheButton()
+            return
+        }
+        if (playUrl.contains(".m3u8", ignoreCase = true)) {
+            // HLS 是分片播放，单文件下载只能拿到播放列表，缓存下来也放不了
+            toast("该视频为 HLS 流，暂不支持离线缓存")
+            return
+        }
+        val key = OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_VIDEO)
+        if (OfflineCacheManager.isRunning(key)) {
+            toast("正在缓存 ${OfflineCacheManager.progressOf(key)}%")
+            return
+        }
+        binding.btnCache.text = "缓存 0%"
+        val started = OfflineCacheManager.start(
+            context = this,
+            videoId = v.id,
+            title = v.title,
+            kind = OfflineCacheManager.KIND_VIDEO,
+            url = playUrl,
+            cover = v.getFullCoverUrl(ApiClient.BASE_URL),
+            headers = playHeaders
+        )
+        if (!started) refreshCacheButton()
+    }
+
     // ==================== 生命周期 ====================
 
     override fun onResume() {
@@ -1433,17 +1633,56 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        // 注册即回放当前快照：重进页面立刻显示真实百分比，不用等下一次回调
+        OfflineCacheManager.addListener(cacheListener)
+        refreshCacheButton()
         val v = video
         if (player == null && v != null) {
-            startPlayback(v, resumePosition)
-            startViewersPolling(videoId)
-            startHistoryReporting(videoId)
+            var startMs = resumePosition
+            // 从后台音频服务回来：取回进度并停掉服务，继续本地视频播放
+            if (playUrl.isNotBlank()) {
+                BackgroundAudioService.takePosition(this, playUrl, videoId)?.let {
+                    startMs = it
+                    toast("已从后台音频续播")
+                }
+            }
+            startPlayback(v, startMs)
+            // 只播本地不拉在看人数/不上报历史
+            if (!localOnly) {
+                startViewersPolling(videoId)
+                startHistoryReporting(videoId)
+            }
         }
     }
 
     override fun onStop() {
         super.onStop()
-        resumePosition = player?.currentPosition ?: 0
+        OfflineCacheManager.removeListener(cacheListener)
+        // 用 playWhenReady 判断「用户想听」：网络慢处于缓冲时 isPlaying 为 false，也要交接
+        val wasPlaying = player?.playWhenReady == true
+        val pos = player?.currentPosition ?: resumePosition
+        resumePosition = pos
+        // 退到后台：按设置把播放交接给前台音频服务，通知栏/锁屏可控制
+        if (!isFinishing && wasPlaying &&
+            PlaybackPrefs.isBackgroundAudioEnabled(this) && playUrl.isNotBlank()
+        ) {
+            BackgroundAudioService.handoff(
+                this,
+                videoId,
+                playUrl,
+                video?.title ?: "",
+                // 封面有就带（本地缓存条目也存了封面地址），没有则由服务留空
+                video?.getFullCoverUrl(ApiClient.BASE_URL) ?: "",
+                pos,
+                playHeaders,
+                // 通知点击时按类型回到视频页
+                BackgroundAudioService.KIND_VIDEO,
+                // 作者名取页面上已有的 UP 主；本地播放拿不到时为 ""
+                video?.up.displayName(""),
+                // 实际在读本地文件（只播本地或命中整文件缓存）：通知点击要回只播本地入口
+                localOnly || playUrl.startsWith("file:")
+            )
+        }
         handler.removeCallbacks(danmakuTicker)
         handler.removeCallbacks(hideGestureOverlay)
         releasePlayer()

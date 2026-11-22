@@ -4,6 +4,11 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 后台音频播放：前台服务 + 通知 + 熄屏继续播放 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 老设备读取本地视频/图片用于投稿 -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -83,10 +88,21 @@
 
         <activity android:name=".ui.settings.SettingsActivity" />
 
+        <!-- 「我的缓存」：只读离线缓存索引，点条目走只播本地分支 -->
+        <activity android:name=".ui.cache.OfflineCacheActivity" />
+
         <activity
             android:name=".ui.settings.SecurityActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <activity android:name=".ui.node.NodeSelectActivity" />
+
+        <!-- 退到后台后以音频方式继续播放，通知栏/锁屏可控制 -->
+        <!-- foregroundServiceType 从 API 29 起才真正按前台服务类型管；21–28 忽略该属性，
+             低版本靠 startForeground 的通知存活，不是漏了兼容分支 -->
+        <service
+            android:name=".player.BackgroundAudioService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>

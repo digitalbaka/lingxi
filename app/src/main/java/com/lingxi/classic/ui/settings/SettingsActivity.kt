@@ -1,6 +1,8 @@
 ﻿package com.lingxi.classic.ui.settings
 
 import android.app.AlertDialog
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -11,16 +13,23 @@ import com.lingxi.classic.BuildConfig
 import com.lingxi.classic.R
 import com.lingxi.classic.databinding.ActivitySettingsBinding
 import com.lingxi.classic.player.ButtonSizeSettings
+import com.lingxi.classic.player.CacheStorage
 import com.lingxi.classic.player.DanmakuSettings
+import com.lingxi.classic.player.OfflineCacheManager
+import com.lingxi.classic.player.PlaybackPrefs
 import com.lingxi.classic.player.VideoCacheManager
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.dp
 import com.lingxi.classic.util.toast
+import com.lingxi.classic.util.toastLong
 
-/** 设置：视频缓存、弹幕参数、关于 */
+/** 设置：视频缓存、离线缓存、存储位置、后台音频、弹幕参数、关于 */
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
+
+    /** onResume 里回填开关状态时不要触发监听写入/请求权限 */
+    private var suppressSwitchCallback = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,6 +40,16 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowClearCache.setOnClickListener { confirmClearCache() }
         binding.rowDanmaku.setOnClickListener { showDanmakuDialog() }
         binding.rowButtonSize.setOnClickListener { showButtonSizeDialog() }
+        binding.rowStorage.setOnClickListener { showStorageDialog() }
+        binding.rowOffline.setOnClickListener { showOfflineDialog() }
+        binding.rowBackgroundAudio.setOnClickListener {
+            binding.switchBackgroundAudio.isChecked = !binding.switchBackgroundAudio.isChecked
+        }
+        binding.switchBackgroundAudio.setOnCheckedChangeListener { _, checked ->
+            if (suppressSwitchCallback) return@setOnCheckedChangeListener
+            PlaybackPrefs.setBackgroundAudioEnabled(this, checked)
+            if (checked) ensureNotificationPermission()
+        }
 
         binding.tvVersion.text = "v${BuildConfig.VERSION_NAME}"
         binding.tvButtonSize.text = ButtonSizeSettings.label()
@@ -39,12 +58,91 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshCacheViews()
+        refreshStorageViews()
+        suppressSwitchCallback = true
+        binding.switchBackgroundAudio.isChecked = PlaybackPrefs.isBackgroundAudioEnabled(this)
+        suppressSwitchCallback = false
         binding.tvButtonSize.text = ButtonSizeSettings.label()
     }
 
     private fun refreshCacheViews() {
         binding.tvCacheLimit.text = "${VideoCacheManager.getCacheLimitMb(this)} MB"
         binding.tvCacheSize.text = FormatUtils.formatBytes(VideoCacheManager.getCacheSizeBytes(this))
+    }
+
+    private fun refreshStorageViews() {
+        binding.tvStorage.text = CacheStorage.describeTarget(this)
+        val list = OfflineCacheManager.list(this)
+        val size = list.sumOf { it.size }
+        binding.tvOfflineSize.text =
+            if (list.isEmpty()) "暂无缓存" else "${list.size} 个 · ${OfflineCacheManager.formatSize(size)}"
+    }
+
+    // ==================== 缓存存储位置 / 离线缓存 ====================
+
+    private fun showStorageDialog() {
+        val externalOk = CacheStorage.isExternalAvailable(this)
+        val labels = arrayOf("内部存储", if (externalOk) "SD 卡" else "SD 卡（未检测到）")
+        val checked = if (CacheStorage.isExternalTarget(this)) 1 else 0
+        AlertDialog.Builder(this)
+            .setTitle("缓存存储位置")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                if (which == 1 && !externalOk) {
+                    toast("未检测到可用的 SD 卡")
+                    return@setSingleChoiceItems
+                }
+                CacheStorage.setTarget(
+                    this,
+                    if (which == 1) CacheStorage.TARGET_EXTERNAL else CacheStorage.TARGET_INTERNAL
+                )
+                refreshStorageViews()
+                refreshCacheViews()
+                toastLong("已切换到${if (which == 1) "SD 卡" else "内部存储"}，之后缓存的视频/音频保存在新位置；已缓存的旧文件仍在原目录，不会出现在「我的缓存」列表里")
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showOfflineDialog() {
+        val list = OfflineCacheManager.list(this)
+        if (list.isEmpty()) {
+            toast("还没有离线缓存，视频/音频页点「缓存」即可保存到本地")
+            return
+        }
+        val labels = list.map { e ->
+            "${if (e.kind == OfflineCacheManager.KIND_AUDIO) "音频" else "视频"} · ${e.title}\n${OfflineCacheManager.formatSize(e.size)}"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("离线缓存（点击删除）")
+            .setItems(labels) { _, which ->
+                val e = list[which]
+                AlertDialog.Builder(this)
+                    .setTitle("删除缓存")
+                    .setMessage("删除「${e.title}」的本地文件？")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("删除") { _, _ ->
+                        OfflineCacheManager.delete(this, e)
+                        refreshStorageViews()
+                        toast("已删除")
+                    }
+                    .show()
+            }
+            .setPositiveButton("清空全部") { _, _ ->
+                OfflineCacheManager.clearAll(this)
+                refreshStorageViews()
+                toast("离线缓存已清空")
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
     }
 
     // ==================== 缓存 ====================

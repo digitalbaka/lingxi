@@ -26,7 +26,9 @@ import com.lingxi.classic.data.model.CoinLog
 import com.lingxi.classic.data.model.expiresAtMillis
 import com.lingxi.classic.databinding.FragmentMineBinding
 import com.lingxi.classic.databinding.ItemMineMenuBinding
+import com.lingxi.classic.player.OfflineCacheManager
 import com.lingxi.classic.ui.auth.LoginActivity
+import com.lingxi.classic.ui.cache.OfflineCacheActivity
 import com.lingxi.classic.ui.message.MessageActivity
 import com.lingxi.classic.ui.node.NodeSelectActivity
 import com.lingxi.classic.ui.settings.SettingsActivity
@@ -334,6 +336,14 @@ class MineFragment : Fragment() {
             MenuItem(R.drawable.ic_menu_upload, "我的投稿") { openVideoList("my_videos") },
             MenuItem(R.drawable.ic_menu_history, "历史记录") { openVideoList("history") },
             MenuItem(R.drawable.ic_menu_favorite, "我的收藏") { openVideoList("favorites") },
+            MenuItem(R.drawable.ic_menu_cache, "我的缓存", needLogin = false,
+                subtitle = {
+                    val cached = OfflineCacheManager.list(ctx)
+                    if (cached.isEmpty()) "暂无"
+                    else "${cached.size} 个 · ${OfflineCacheManager.formatSize(cached.sumOf { it.size })}"
+                }) {
+                startActivity(Intent(ctx, OfflineCacheActivity::class.java))
+            },
             MenuItem(R.drawable.ic_menu_profile, "个人资料编辑") { showProfileEditDialog() },
             MenuItem(R.drawable.ic_menu_password, "修改密码") { showChangePasswordDialog() },
             MenuItem(R.drawable.ic_menu_security, "账号安全（两步验证）") {

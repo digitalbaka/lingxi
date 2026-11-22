@@ -381,6 +381,21 @@ object ApiClient {
     val apiService: ApiService by lazy { retrofit.create(ApiService::class.java) }
 
     /**
+     * 节点列表专用服务：只在加载节点列表时叠加 10s 总超时（与首页对齐），
+     * 其它请求继续走 [apiService]。
+     */
+    val nodeService: ApiService by lazy {
+        retrofit.newBuilder()
+            .client(
+                okHttpClient.newBuilder()
+                    .callTimeout(HOME_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .build()
+            )
+            .build()
+            .create(ApiService::class.java)
+    }
+
+    /**
      * 首屏推荐专用服务：只在这一个入口上叠加 callTimeout，并换成空连接池，
      * 保证重试时一定新建 TCP 连接，不会复用那条已挂起的连接。
      * 其它接口继续走 [apiService]（全局 30s 读超时不变）。

@@ -68,6 +68,16 @@
                     android:textSize="15sp" />
 
                 <TextView
+                    android:id="@+id/btnCache"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/player_bg_control_btn"
+                    android:text="缓存"
+                    android:textColor="@color/white"
+                    android:textSize="12sp" />
+
+                <TextView
                     android:id="@+id/btnQualityFs"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
