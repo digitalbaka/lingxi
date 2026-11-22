@@ -24,6 +24,7 @@ import com.lingxi.classic.databinding.ActivityPublishBinding
 import com.lingxi.classic.ui.auth.LoginActivity
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.ImageLoader
+import com.lingxi.classic.util.apiMessage
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.toastLong
 import com.lingxi.classic.util.visible
@@ -301,10 +302,42 @@ class PublishActivity : AppCompatActivity() {
         }
         return withContext(Dispatchers.IO) {
             uploadClient.newCall(builder.build()).execute().use { response ->
-                val bodyStr = response.body?.string() ?: return@withContext null
+                val bodyStr = response.body?.string().orEmpty()
+                // 非 2xx 时响应体不一定是 JSON（Cloudflare/nginx 的 413、502 会直接回 HTML 或纯文本），
+                // 必须先判状态码再解析，否则会抛出 "Expected BEGIN_OBJECT but was STRING" 这种看不懂的错
+                if (!response.isSuccessful) {
+                    // 留一份原始证据（release 包也能用 adb logcat -s PublishUpload 看到），便于定位是网关还是业务校验
+                    android.util.Log.w("PublishUpload", "HTTP ${response.code} ${response.message}: ${bodyStr.trim().take(300)}")
+                    throw java.io.IOException(uploadFailureHint(response.code, bodyStr))
+                }
+                if (bodyStr.isBlank()) {
+                    throw java.io.IOException("服务器返回空响应（HTTP ${response.code}）")
+                }
                 val type = object : TypeToken<ApiResponse<UploadResult>>() {}.type
-                ApiClient.gson.fromJson<ApiResponse<UploadResult>>(bodyStr, type)
+                try {
+                    ApiClient.gson.fromJson<ApiResponse<UploadResult>>(bodyStr, type)
+                } catch (e: Exception) {
+                    throw java.io.IOException("服务器响应不是合法的 JSON（HTTP ${response.code}）：${bodyStr.trim().take(120)}")
+                }
             }
+        }
+    }
+
+    /** 上传失败的可读提示：优先保留服务端/边缘节点给出的可操作信息 */
+    private fun uploadFailureHint(code: Int, body: String): String {
+        val text = body.trim()
+        val serverMsg = try {
+            if (text.startsWith("{")) {
+                ApiClient.gson.fromJson(text, com.google.gson.JsonObject::class.java)
+                    ?.get("message")?.takeIf { it.isJsonPrimitive }?.asString
+            } else null
+        } catch (_: Exception) { null }
+        if (!serverMsg.isNullOrBlank() && serverMsg != "请先登录") return "HTTP $code：$serverMsg"
+        return when (code) {
+            413 -> "HTTP 413 请求体过大：文件超过了服务器或节点允许的单次上传大小，请压缩后重试"
+            401 -> "登录已过期，请重新登录后再试"
+            502, 503, 504 -> "HTTP $code 服务器暂时不可用，请稍后重试"
+            else -> if (text.isNotEmpty()) "HTTP $code：${text.take(120)}" else "HTTP $code"
         }
     }
 
@@ -393,6 +426,11 @@ class PublishActivity : AppCompatActivity() {
                 } else {
                     toast(resp.message.ifBlank { "发布失败" })
                 }
+            } catch (e: retrofit2.HttpException) {
+                // 4xx/5xx 的失败原因在统一信封的 message 里（如「正文不能少于 N 字」），别只显示 HTTP 400
+                val msg = e.apiMessage("发布失败（HTTP ${e.code()}）")
+                android.util.Log.w("PublishSubmit", "HTTP ${e.code()}: $msg")
+                toast(msg)
             } catch (e: Exception) {
                 toast("网络错误：${e.message}")
             } finally {

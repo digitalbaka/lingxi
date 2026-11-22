@@ -31,17 +31,32 @@ class NodeSelectActivity : AppCompatActivity() {
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
+        binding.btnResetNode.setOnClickListener { resetToMainSite() }
 
         loadNodes()
     }
 
+    /** 节点列表加载失败时，允许直接回到主站（等同选中列表里的主站行，持久化保存） */
+    private fun resetToMainSite() {
+        PlaybackHelper.selectNode(null)
+        toast("已重置为默认服务器")
+        finish()
+    }
+
+    /** 加载失败时统一入口：原 toast 文案不变，仅把「切回主站」按钮亮出来 */
+    private fun showResetEntry(msg: String) {
+        toast(msg)
+        binding.btnResetNode.visible = true
+    }
+
     private fun loadNodes() {
+        binding.btnResetNode.visible = false
         lifecycleScope.launch {
             try {
-                val resp = ApiClient.apiService.getGatewayNodes()
+                val resp = ApiClient.nodeService.getGatewayNodes()
                 val info = resp.data
                 if (!resp.isSuccess || info == null) {
-                    toast(resp.message.ifBlank { "加载失败" })
+                    showResetEntry(resp.message.ifBlank { "加载失败" })
                     return@launch
                 }
                 if (!info.enabled) {
@@ -67,7 +82,7 @@ class NodeSelectActivity : AppCompatActivity() {
                     binding.tvQuota.text = "节点流量：已用 ${FormatUtils.formatBytes(quota.used)} / 共 ${FormatUtils.formatBytes(quota.limit)}"
                 }
             } catch (e: Exception) {
-                toast("加载失败：${e.message}")
+                showResetEntry("加载失败：${e.message}")
             }
         }
     }

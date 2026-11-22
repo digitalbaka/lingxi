@@ -1,9 +1,12 @@
 package com.lingxi.classic.ui.article
 
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -15,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -27,6 +31,9 @@ import com.lingxi.classic.data.model.Video
 import com.lingxi.classic.data.model.ViewReportRequest
 import com.lingxi.classic.data.model.displayName
 import com.lingxi.classic.databinding.ActivityArticleBinding
+import com.lingxi.classic.player.BackgroundAudioService
+import com.lingxi.classic.player.OfflineCacheManager
+import com.lingxi.classic.player.PlaybackPrefs
 import com.lingxi.classic.player.VideoCacheManager
 import com.lingxi.classic.ui.common.CommentsController
 import com.lingxi.classic.ui.common.InteractionBar
@@ -54,13 +61,22 @@ class ArticleActivity : AppCompatActivity() {
     private var videoId: Long = 0
     private var video: Video? = null
     private var following = false
+    /** 只播本地：入口参数 Navigator.EXTRA_LOCAL_ONLY，命中缓存后不发起任何网络请求 */
+    private var localOnly = false
 
     private var commentsController: CommentsController? = null
     private var interactionBar: InteractionBar? = null
 
     private var audioPlayer: ExoPlayer? = null
     private var audioUrl = ""
+    /** 与 audioUrl 配套的请求头，后台交接与离线缓存复用 */
+    private var audioHeaders: Map<String, String> = emptyMap()
     private var retriedAfterRecover = false
+    /** 建源中标志：网络慢时连点播放键不能并发建多台播放器（会同时出声且只释放得掉最后一台） */
+    private var preparing = false
+    private var prepareJob: Job? = null
+    /** 建源代次：被取消的旧任务不能在 finally 里把新一轮的 preparing 清掉 */
+    private var prepareToken = 0
 
     // 播放器设置：player 会被 onStop 释放，因此状态存在字段里，新建 player 后重新应用；
     // 字段值会落盘到 SharedPreferences，退出重进（新实例）也能回填，且跨稿件共享
@@ -118,7 +134,8 @@ class ArticleActivity : AppCompatActivity() {
         }
         loadAudioPrefs()
         initViews()
-        loadDetail(videoId)
+        localOnly = intent.getBooleanExtra(Navigator.EXTRA_LOCAL_ONLY, false)
+        if (localOnly) loadLocalAudio() else loadDetail(videoId)
     }
 
     /** 读回上次的循环/倍速/音量（跨稿件共享），控件与 player 都用这份值 */
@@ -131,6 +148,7 @@ class ArticleActivity : AppCompatActivity() {
     private fun initViews() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnPlayPause.setOnClickListener { toggleAudio() }
+        binding.btnCache.setOnClickListener { cacheCurrentAudio() }
         binding.btnRewind.setOnClickListener { seekBy(-SEEK_STEP_MS) }
         binding.btnForward.setOnClickListener { seekBy(SEEK_STEP_MS) }
         binding.btnRepeat.setOnClickListener { toggleRepeat() }
@@ -172,6 +190,12 @@ class ArticleActivity : AppCompatActivity() {
     }
 
     private fun loadDetail(id: Long) {
+        // 切到另一篇内容：丢弃上一页的音频地址与播放器，避免把旧内容续播进来
+        if (audioUrl.isNotBlank()) {
+            releaseAudio()
+            audioUrl = ""
+            audioHeaders = emptyMap()
+        }
         // 关注状态由详情接口的 following 决定，拿到前不显示 XML 默认的「关注」
         following = false
         binding.btnFollow.visible = false
@@ -190,6 +214,9 @@ class ArticleActivity : AppCompatActivity() {
                     return@launch
                 }
                 video = v
+                // 新建页面实例时：同一条内容从后台音频续播，不同内容则停掉后台音频
+                val bgPos = BackgroundAudioService.takePosition(this@ArticleActivity, "", v.id)
+                if (bgPos != null) prepareAudio(bgPos) else BackgroundAudioService.stop(this@ArticleActivity)
                 bindDetail(v, detail.following)
                 interactionBar?.bind(v)
                 commentsController = CommentsController(
@@ -203,6 +230,74 @@ class ArticleActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 toast("加载失败：${e.message}")
             }
+        }
+    }
+
+    /**
+     * 只播本地：只查离线缓存索引拿标题，不请求详情/评论，直接起播本地音频文件。
+     * 索引里没有这条（文件被删）就退出，不回退到网络播放。
+     */
+    private fun loadLocalAudio() {
+        val entry = OfflineCacheManager.find(
+            this, OfflineCacheManager.keyOf(videoId, OfflineCacheManager.KIND_AUDIO)
+        )
+        if (entry == null) {
+            toast("本地缓存不存在，可能已被删除")
+            finish()
+            return
+        }
+        val v = Video(
+            id = entry.videoId,
+            title = entry.title,
+            cover = entry.cover,
+            kind = OfflineCacheManager.KIND_AUDIO
+        )
+        video = v
+        bindLocalDetail(v)
+        prepareAudio()
+    }
+
+    /**
+     * 只播本地的详情区：详情、UP 信息拿不到，控件保留并置灰，不隐藏、不空白。
+     * 封面只显示占位底色，不加载网络图片。
+     */
+    private fun bindLocalDetail(v: Video) {
+        binding.tvTopTitle.text = "音频"
+        binding.tvTitle.text = v.title
+        binding.tvMeta.text = "离线播放 · 详情暂不可用"
+        binding.tvMeta.alpha = 0.5f
+
+        // 封面保留位置但不发图片请求，只露出占位底色
+        binding.ivCover.visible = true
+        binding.ivCover.alpha = 0.5f
+
+        // UP 信息：头像占位、名字置灰、关注不可点
+        binding.ivUpAvatar.alpha = 0.5f
+        binding.ivUpAvatar.setOnClickListener(null)
+        binding.tvUpName.text = "UP主信息不可用"
+        binding.tvUpName.alpha = 0.5f
+        binding.tvUpName.setOnClickListener(null)
+        binding.btnFollow.visible = true
+        binding.btnFollow.alpha = 0.5f
+        binding.btnFollow.isEnabled = false
+
+        // 互动栏与评论区：置灰且整体不可点，避免误触发起网络请求
+        binding.interactionBar.root.alpha = 0.4f
+        disableAll(binding.interactionBar.root)
+        binding.commentInput.root.alpha = 0.4f
+        disableAll(binding.commentInput.root)
+        binding.rvComments.alpha = 0.4f
+
+        binding.audioBar.visible = true
+        binding.llContent.visible = false
+        refreshCacheButton()
+    }
+
+    /** 递归设为不可用：置灰后的按钮不再响应点击，也就不会发起请求 */
+    private fun disableAll(view: View) {
+        view.isEnabled = false
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) disableAll(view.getChildAt(i))
         }
     }
 
@@ -269,10 +364,78 @@ class ArticleActivity : AppCompatActivity() {
 
     // ==================== 音频播放 ====================
 
+    /** 缓存状态观察者：只在页面可见期间注册，回调不再绑定发起下载的 Activity 实例 */
+    private val cacheListener = object : OfflineCacheManager.Listener {
+        override fun onProgress(key: String, pct: Int) {
+            val v = video ?: return
+            if (key != OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_AUDIO)) return
+            binding.btnCache.text = "$pct%"
+        }
+
+        override fun onFinished(key: String, ok: Boolean, message: String) {
+            val v = video ?: return
+            if (key != OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_AUDIO)) return
+            // 完成后重算按钮状态（保留原有逻辑），失败同样回到「缓存」
+            refreshCacheButton()
+            toast(if (ok) "已缓存到本地，可在设置里管理" else "缓存失败：$message")
+        }
+    }
+
+    private fun refreshCacheButton() {
+        val v = video ?: return
+        val key = OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_AUDIO)
+        binding.btnCache.text = when {
+            OfflineCacheManager.localFile(this, v.id, OfflineCacheManager.KIND_AUDIO) != null -> "已缓存"
+            OfflineCacheManager.isRunning(key) -> "${OfflineCacheManager.progressOf(key)}%"
+            else -> "缓存"
+        }
+    }
+
+    private fun cacheCurrentAudio() {
+        val v = video ?: return
+        if (OfflineCacheManager.localFile(this, v.id, OfflineCacheManager.KIND_AUDIO) != null) {
+            toast("已缓存到本地")
+            refreshCacheButton()
+            return
+        }
+        if (audioUrl.isBlank()) {
+            toast("音频还没加载好，先点播放再缓存")
+            return
+        }
+        if (audioUrl.startsWith("file://")) {
+            toast("该音频已在本地")
+            refreshCacheButton()
+            return
+        }
+        if (audioUrl.contains(".m3u8", ignoreCase = true)) {
+            toast("该音频为 HLS 流，暂不支持离线缓存")
+            return
+        }
+        val key = OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_AUDIO)
+        if (OfflineCacheManager.isRunning(key)) {
+            toast("正在缓存 ${OfflineCacheManager.progressOf(key)}%")
+            return
+        }
+        binding.btnCache.text = "0%"
+        val started = OfflineCacheManager.start(
+            context = this,
+            videoId = v.id,
+            title = v.title,
+            kind = OfflineCacheManager.KIND_AUDIO,
+            url = audioUrl,
+            cover = v.getFullCoverUrl(com.lingxi.classic.data.api.ApiClient.BASE_URL),
+            headers = audioHeaders
+        )
+        if (!started) refreshCacheButton()
+    }
+
     private fun toggleAudio() {
         val p = audioPlayer
-        if (p == null) prepareAudio()
-        else if (p.isPlaying) p.pause()
+        if (p == null) {
+            // 建源未完成时忽略连点：等这一台建好后再响应暂停/播放
+            if (preparing) return
+            prepareAudio()
+        } else if (p.isPlaying) p.pause()
         else p.play()
     }
 
@@ -344,30 +507,64 @@ class ArticleActivity : AppCompatActivity() {
         p.volume = vol
     }
 
-    private fun prepareAudio() {
+    private fun prepareAudio(startAt: Long = 0L) {
         val v = video ?: return
-        lifecycleScope.launch {
+        if (preparing) return
+        preparing = true
+        val token = ++prepareToken
+        // 本页接管播放前，先掐掉可能还在后台响的上一条内容
+        BackgroundAudioService.stop(this)
+        // 兜底：任何情况下都先释放旧实例，保证全局只有一台音频播放器
+        releaseAudio()
+        prepareJob = lifecycleScope.launch {
+            var p: ExoPlayer? = null
             try {
-                val ps = PlaybackHelper.buildPlaySource(this@ArticleActivity, v)
-                audioUrl = ps.url
-                val factory = VideoCacheManager.cacheDataSourceFactory(this@ArticleActivity, ps.headers)
+                // 先看本地是否有整文件缓存：命中就直接读文件，连建源（节点授权/拉流）都不发起
+                val local = OfflineCacheManager.localFile(this@ArticleActivity, v.id, OfflineCacheManager.KIND_AUDIO)
+                val url: String
+                var headers: Map<String, String> = emptyMap()
+                if (local != null) {
+                    url = Uri.fromFile(local).toString()
+                } else if (localOnly) {
+                    // 只播本地分支下文件恰好被删：直接退出，绝不回退到网络拉流
+                    toast("本地缓存文件不存在")
+                    return@launch
+                } else {
+                    val ps = PlaybackHelper.buildPlaySource(this@ArticleActivity, v)
+                    url = ps.url
+                    headers = ps.headers
+                }
+                audioUrl = url
+                audioHeaders = headers
+                val factory = if (local != null) {
+                    DefaultDataSource.Factory(this@ArticleActivity)
+                } else {
+                    VideoCacheManager.cacheDataSourceFactory(this@ArticleActivity, headers)
+                }
                 val source = ProgressiveMediaSource.Factory(factory)
-                    .createMediaSource(MediaItem.fromUri(ps.url))
-                val p = ExoPlayer.Builder(this@ArticleActivity)
+                    .createMediaSource(MediaItem.fromUri(audioUrl))
+                p = ExoPlayer.Builder(this@ArticleActivity)
                     .setLoadControl(
                         DefaultLoadControl.Builder()
                             .setBufferDurationsMs(10_000, 30_000, 1_500, 3_000)
                             .build()
                     )
                     .build()
+                // 建源期间页面已退出/被新一次播放打断：直接释放，不留给后台
+                if (!isActive) {
+                    p.release()
+                    return@launch
+                }
                 p.setMediaSource(source)
+                if (startAt > 0) p.seekTo(startAt)
                 p.prepare()
                 p.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         binding.btnPlayPause.text = if (isPlaying) "暂停" else "播放"
                         if (isPlaying) {
                             handler.post(seekTicker)
-                            armViewReport()
+                            // 只播本地不上报播放量
+                            if (!localOnly) armViewReport()
                         } else {
                             handler.removeCallbacks(seekTicker)
                         }
@@ -378,15 +575,27 @@ class ArticleActivity : AppCompatActivity() {
                     }
                 })
                 applyAudioPrefs(p)
-                p.playWhenReady = true
                 audioPlayer = p
+                p.playWhenReady = true
+                refreshCacheButton()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                p?.release()
+                throw e
             } catch (e: Exception) {
+                p?.release()
                 toast("播放失败：${e.message}")
+            } finally {
+                if (token == prepareToken) preparing = false
             }
         }
     }
 
     private fun onAudioError(error: PlaybackException) {
+        // 本地文件不走节点：重授权救不回来，也不该再发请求
+        if (localOnly) {
+            toast("本地文件播放失败：${error.localizedMessage ?: "文件可能已损坏"}")
+            return
+        }
         if (!retriedAfterRecover) {
             retriedAfterRecover = true
             val pos = audioPlayer?.currentPosition ?: 0
@@ -398,8 +607,8 @@ class ArticleActivity : AppCompatActivity() {
                 }
                 if (retry) {
                     releaseAudio()
-                    prepareAudio()
-                    audioPlayer?.seekTo(pos)
+                    // 建源是异步的：进度直接作为参数传入，不能建完前 seekTo
+                    prepareAudio(pos)
                 } else {
                     toast("播放失败：${error.localizedMessage ?: "未知错误"}")
                 }
@@ -410,7 +619,13 @@ class ArticleActivity : AppCompatActivity() {
     }
 
     private fun releaseAudio() {
+        // 注意：这里不复位 preparing。prepareAudio 先置位再调本方法，
+        // 复位交给建源任务自己的 finally（按 prepareToken 判断代次），
+        // 否则守卫会被立刻清掉，连点仍能并发建出多台播放器。
+        prepareJob?.cancel()
+        prepareJob = null
         handler.removeCallbacks(seekTicker)
+        audioPlayer?.pause()
         audioPlayer?.release()
         audioPlayer = null
         binding.btnPlayPause.text = "播放"
@@ -476,8 +691,37 @@ class ArticleActivity : AppCompatActivity() {
 
     // ==================== 生命周期 ====================
 
+    override fun onStart() {
+        super.onStart()
+        // 注册即回放当前快照：重进页面立刻显示真实百分比，不用等下一次回调
+        OfflineCacheManager.addListener(cacheListener)
+        refreshCacheButton()
+        // 从后台音频服务回来：取回进度并停服务，继续本地播放
+        if (audioPlayer == null && !preparing && audioUrl.isNotBlank()) {
+            BackgroundAudioService.takePosition(this, audioUrl, video?.id ?: 0L)?.let { prepareAudio(it) }
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        OfflineCacheManager.removeListener(cacheListener)
+        val p = audioPlayer
+        // 退到后台：按设置把播放交接给前台音频服务，通知栏/锁屏可控制
+        // 用 playWhenReady 判断「用户想听」：网络慢处于缓冲时 isPlaying 为 false，也要交接
+        if (!isFinishing && p != null && p.playWhenReady &&
+            PlaybackPrefs.isBackgroundAudioEnabled(this) && audioUrl.isNotBlank()
+        ) {
+            BackgroundAudioService.handoff(
+                this,
+                video?.id ?: 0L,
+                audioUrl,
+                video?.title ?: "",
+                // 只播本地不传封面地址，通知栏不为了加载封面去发请求
+                if (localOnly) "" else (video?.getFullCoverUrl(com.lingxi.classic.data.api.ApiClient.BASE_URL) ?: ""),
+                p.currentPosition,
+                audioHeaders
+            )
+        }
         releaseAudio()
         viewReportJob?.cancel()
         viewReportJob = null

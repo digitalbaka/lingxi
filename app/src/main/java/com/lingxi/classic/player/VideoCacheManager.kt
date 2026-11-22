@@ -6,7 +6,6 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
-import java.io.File
 
 /**
  * 视频磁盘缓存（全局单例，SimpleCache 有文件锁）。
@@ -37,6 +36,11 @@ object VideoCacheManager {
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putInt(KEY_LIMIT_MB, mb).apply()
+        resetInstance()
+    }
+
+    /** 释放当前 SimpleCache 实例（切换存储位置/上限后必须重建） */
+    fun resetInstance() {
         synchronized(this) {
             try { simpleCache?.release() } catch (_: Exception) {}
             simpleCache = null
@@ -46,7 +50,7 @@ object VideoCacheManager {
     /** 启动时修剪：必须在任何 SimpleCache 实例创建之前调用 */
     fun trimIfOverLimit(context: Context) {
         try {
-            val dir = File(context.cacheDir, "video_cache")
+            val dir = CacheStorage.streamCacheDir(context)
             if (!dir.exists()) return
             val limit = getCacheLimitBytes(context)
             val size = dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
@@ -56,11 +60,15 @@ object VideoCacheManager {
 
     fun getCache(context: Context): SimpleCache {
         return simpleCache ?: synchronized(this) {
-            simpleCache ?: SimpleCache(
-                File(context.cacheDir, "video_cache"),
-                LeastRecentlyUsedCacheEvictor(getCacheLimitBytes(context)),
-                StandaloneDatabaseProvider(context.applicationContext)
-            ).also { simpleCache = it }
+            simpleCache ?: run {
+                val dir = CacheStorage.streamCacheDir(context)
+                if (!dir.exists()) dir.mkdirs()
+                SimpleCache(
+                    dir,
+                    LeastRecentlyUsedCacheEvictor(getCacheLimitBytes(context)),
+                    StandaloneDatabaseProvider(context.applicationContext)
+                ).also { simpleCache = it }
+            }
         }
     }
 
@@ -103,7 +111,7 @@ object VideoCacheManager {
         synchronized(this) {
             try { simpleCache?.release() } catch (_: Exception) {}
             simpleCache = null
-            File(context.cacheDir, "video_cache").deleteRecursively()
+            CacheStorage.streamCacheDir(context).deleteRecursively()
         }
     }
 }

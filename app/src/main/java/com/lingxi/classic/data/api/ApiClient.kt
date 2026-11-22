@@ -108,6 +108,21 @@ object ApiClient {
             .create()
     }
 
+    /**
+     * 节点列表专用服务：只在加载节点列表时叠加 10s 总超时（与首页对齐），
+     * 其它请求继续走 [apiService]。
+     */
+    val nodeService: ApiService by lazy {
+        retrofit.newBuilder()
+            .client(
+                okHttpClient.newBuilder()
+                    .callTimeout(HOME_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .build()
+            )
+            .build()
+            .create(ApiService::class.java)
+    }
+
     /** 刷新令牌专用客户端：不带鉴权与 401 处理，避免刷新请求再触发刷新 */
     private val tokenClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
