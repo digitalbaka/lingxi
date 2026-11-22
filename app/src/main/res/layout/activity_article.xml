@@ -247,6 +247,18 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/btnCache"
+                        android:layout_width="56dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_audio_ctrl"
+                        android:contentDescription="缓存到本地"
+                        android:gravity="center"
+                        android:text="缓存"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
