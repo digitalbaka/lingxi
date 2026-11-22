@@ -1573,10 +1573,16 @@ class PlayerActivity : AppCompatActivity() {
                 videoId,
                 playUrl,
                 video?.title ?: "",
-                // 只播本地不传封面地址，通知栏不为了加载封面去发请求
-                if (localOnly) "" else (video?.getFullCoverUrl(ApiClient.BASE_URL) ?: ""),
+                // 封面有就带（本地缓存条目也存了封面地址），没有则由服务留空
+                video?.getFullCoverUrl(ApiClient.BASE_URL) ?: "",
                 pos,
-                playHeaders
+                playHeaders,
+                // 通知点击时按类型回到视频页
+                BackgroundAudioService.KIND_VIDEO,
+                // 作者名取页面上已有的 UP 主；本地播放拿不到时为 ""
+                video?.up.displayName(""),
+                // 实际在读本地文件（只播本地或命中整文件缓存）：通知点击要回只播本地入口
+                localOnly || playUrl.startsWith("file:")
             )
         }
         handler.removeCallbacks(danmakuTicker)

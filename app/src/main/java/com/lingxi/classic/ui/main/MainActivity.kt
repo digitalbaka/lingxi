@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import com.lingxi.classic.R
 import com.lingxi.classic.data.api.ApiClient
 import com.lingxi.classic.databinding.ActivityMainBinding
+import com.lingxi.classic.player.BackgroundAudioService
 import com.lingxi.classic.ui.search.SearchActivity
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.unwrap
@@ -49,6 +50,27 @@ class MainActivity : AppCompatActivity() {
         initBottomBar()
         switchTab(currentTab.coerceIn(0, TAB_COUNT - 1), force = true)
         loadSiteStats()
+        // 桌面图标冷启动回到 App 且后台还在播：直接回播放页，不留在首页
+        resumePlayingPageIfFromLauncher(intent)
+    }
+
+    /**
+     * 从桌面图标进入时，本 Activity 是 singleTask：系统会把压在它上面的播放页清掉，
+     * 于是用户看到的是首页/我的。若后台音频服务仍在播，就按服务记录的 id/类型/是否本地
+     * 重新打开播放页（页面自己会从服务取回进度）。只在 launcher 意图上触发，
+     * 应用内切 Tab、点通知（直达播放页）都不会走到这里，不会把主动回首页的用户拽走。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        resumePlayingPageIfFromLauncher(intent)
+    }
+
+    private fun resumePlayingPageIfFromLauncher(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_MAIN) return
+        if (!intent.hasCategory(Intent.CATEGORY_LAUNCHER)) return
+        if (!BackgroundAudioService.isPlaying()) return
+        BackgroundAudioService.nowPlayingIntent(this)?.let { startActivity(it) }
     }
 
     override fun onResume() {

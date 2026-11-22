@@ -254,7 +254,9 @@ class ArticleActivity : AppCompatActivity() {
         )
         video = v
         bindLocalDetail(v)
-        prepareAudio()
+        // 与在线分支一致：新页面实例接管前先取回后台服务里的进度（本地文件同样按 id 命中），
+        // 否则从通知/桌面图标回来会从 0 开始
+        prepareAudio(BackgroundAudioService.takePosition(this, "", v.id) ?: 0L)
     }
 
     /**
@@ -716,10 +718,16 @@ class ArticleActivity : AppCompatActivity() {
                 video?.id ?: 0L,
                 audioUrl,
                 video?.title ?: "",
-                // 只播本地不传封面地址，通知栏不为了加载封面去发请求
-                if (localOnly) "" else (video?.getFullCoverUrl(com.lingxi.classic.data.api.ApiClient.BASE_URL) ?: ""),
+                // 封面有就带（本地缓存条目也存了封面地址），没有则由服务留空
+                video?.getFullCoverUrl(com.lingxi.classic.data.api.ApiClient.BASE_URL) ?: "",
                 p.currentPosition,
-                audioHeaders
+                audioHeaders,
+                // 通知点击时按类型回到音频页
+                BackgroundAudioService.KIND_AUDIO,
+                // 作者名取页面上已有的 UP 主；本地播放拿不到时为 ""
+                video?.up.displayName(""),
+                // 实际在读本地文件（只播本地或命中整文件缓存）：通知点击要回只播本地入口
+                localOnly || audioUrl.startsWith("file:")
             )
         }
         releaseAudio()
