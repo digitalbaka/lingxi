@@ -33,7 +33,12 @@ object OfflineCacheManager {
         val cover: String,
         val fileName: String,
         val size: Long,
-        val createdAt: Long
+        val createdAt: Long,
+        /** UP 主昵称（旧索引没有该字段，空串表示未知） */
+        val author: String = "",
+        val authorAvatar: String = "",
+        /** 时长（秒）；0 表示旧索引未记录，列表页会回读本地文件元数据补齐 */
+        val durationSec: Long = 0
     )
 
     private val main = Handler(Looper.getMainLooper())
@@ -114,7 +119,10 @@ object OfflineCacheManager {
         kind: String,
         url: String,
         cover: String,
-        headers: Map<String, String>
+        headers: Map<String, String>,
+        author: String = "",
+        authorAvatar: String = "",
+        durationSec: Long = 0
     ): Boolean {
         val app = context.applicationContext
         val key = keyOf(videoId, kind)
@@ -193,7 +201,10 @@ object OfflineCacheManager {
                             cover = cover,
                             fileName = target.name,
                             size = target.length(),
-                            createdAt = System.currentTimeMillis()
+                            createdAt = System.currentTimeMillis(),
+                            author = author,
+                            authorAvatar = authorAvatar,
+                            durationSec = durationSec
                         )
                         writeIndex(app, readIndex(app).filter { it.key != key } + entry)
                         running.remove(key)
@@ -253,7 +264,14 @@ object OfflineCacheManager {
         val raw = prefs(context).getString(KEY_INDEX, null) ?: return emptyList()
         return try {
             val type = object : TypeToken<List<CachedMedia>>() {}.type
-            ApiClient.gson.fromJson<List<CachedMedia>>(raw, type) ?: emptyList()
+            // 老索引没有 author/authorAvatar 字段：Gson 走 Unsafe 分配、不执行 Kotlin 默认值，
+            // 缺字段会读成 null。字段声明是非空 String，直接写 e.author ?: "" 会被编译器当成
+            // 恒真折叠掉；用可空局部变量承接，判空才会真正落到字节码里。
+            ApiClient.gson.fromJson<List<CachedMedia>>(raw, type)?.map { e ->
+                val author: String? = e.author
+                val avatar: String? = e.authorAvatar
+                e.copy(author = author ?: "", authorAvatar = avatar ?: "")
+            } ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }

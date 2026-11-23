@@ -43,4 +43,13 @@ object Navigator {
                 .putExtra(EXTRA_UID, uid)
         )
     }
+
+    /** 打开已缓存内容的「只播声音」分支：视频容器也交给文章页的本地播放器，只出声不显示画面 */
+    fun openLocalAudio(context: Context, id: Long) {
+        context.startActivity(
+            Intent(context, com.lingxi.classic.ui.article.ArticleActivity::class.java)
+                .putExtra(EXTRA_VIDEO_ID, id)
+                .putExtra(EXTRA_LOCAL_ONLY, true)
+        )
+    }
 }

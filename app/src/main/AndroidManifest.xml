@@ -89,7 +89,9 @@
         <activity android:name=".ui.settings.SettingsActivity" />
 
         <!-- 「我的缓存」：只读离线缓存索引，点条目走只播本地分支 -->
-        <activity android:name=".ui.cache.OfflineCacheActivity" />
+        <activity
+            android:name=".ui.cache.OfflineCacheActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
         <activity
             android:name=".ui.settings.SecurityActivity"

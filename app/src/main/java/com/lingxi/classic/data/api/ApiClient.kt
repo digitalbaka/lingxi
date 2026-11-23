@@ -11,6 +11,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.lingxi.classic.BuildConfig
+import com.lingxi.classic.data.PlaybackHelper
 import com.lingxi.classic.data.auth.AuthManager
 import com.lingxi.classic.data.model.AdItem
 import com.lingxi.classic.data.model.ApiResponse
@@ -23,6 +24,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -67,11 +70,21 @@ object ApiClient {
      */
     private const val HOME_AUX_CALL_TIMEOUT_MS = 9_000L
 
-    /** 401 兜底等待续期的上限：主站 refresh 正常耗时约 100–300ms，留 10 倍余量又不长时间卡住网络回调 */
-    private const val AUTH_RETRY_WAIT_MS = 4_000L
+    /**
+     * 401 兜底等待续期的上限：主站 refresh 正常约 100–300ms，但切网/弱网下 TLS 建连可能明显变慢。
+     * 4s 会让这些请求拿不到新令牌而误报「登录已过期」；放宽到 9s，仍远小于读超时 30s。
+     * 超时只放弃本次等待，不取消后台续期、不清会话。
+     */
+    private const val AUTH_RETRY_WAIT_MS = 9_000L
 
     /** 续期失败后的预热退避窗口，避免失败风暴 */
     private const val WARMUP_BACKOFF_MS = 30_000L
+
+    /**
+     * 节点请求的 UI 侧硬上限：系统 DNS 解析不可中断，callTimeout 到点抛出后线程仍可能卡在
+     * InetAddress.getByName 等系统解析器自己超时。这里用协程超时兜底，保证约 10s 一定出结果。
+     */
+    private const val NODE_UI_TIMEOUT_MS = 10_000L
 
     /** 门禁 403 响应体探测上限：正常只有一两百字节的 JSON，足够大又不会把大响应读进内存 */
     private const val GATE_PEEK_BYTES = 32L * 1024L
@@ -156,24 +169,47 @@ object ApiClient {
     /**
      * 401 兜底续期：**本类唯一允许等待续期结果的位置**，上限 [AUTH_RETRY_WAIT_MS]。
      * 已有续期在跑就等它（不重复发请求），没有就自己跑完。
+     * 等待超时 **不清会话、不取消续期**：本次请求先拿旧令牌返回，续期继续在后台跑完，
+     * 后续请求会用上新令牌；只有最终结果仍是失败时才会由服务端返回 401。
      * 失败返回旧令牌（可能是 null），由调用方决定是否重试。
      */
     private fun refreshForRetry(): String? {
-        refreshLock.lock()
+        // 有界等待：拿锁和等结果共用同一份 [AUTH_RETRY_WAIT_MS] 预算，超时就返回旧令牌。
+        val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(AUTH_RETRY_WAIT_MS)
+        val locked = try {
+            refreshLock.tryLock(AUTH_RETRY_WAIT_MS, TimeUnit.MILLISECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+        if (!locked) {
+            Log.w(TAG, "auth retry wait timeout(${AUTH_RETRY_WAIT_MS}ms), keep session, refresh continues in background")
+            return AuthManager.token
+        }
         try {
             if (refreshInFlight.get()) {
-                refreshDone.await(AUTH_RETRY_WAIT_MS, TimeUnit.MILLISECONDS)
+                val remainNs = deadlineNs - System.nanoTime()
+                val finished = remainNs > 0L && refreshDone.await(remainNs, TimeUnit.NANOSECONDS)
+                if (!finished) {
+                    Log.w(TAG, "auth retry wait timeout(${AUTH_RETRY_WAIT_MS}ms), keep session, refresh continues in background")
+                }
                 return AuthManager.token
             }
             refreshInFlight.set(true)
-            try {
-                return refreshAccessToken() ?: AuthManager.token
-            } finally {
-                refreshInFlight.set(false)
-                refreshDone.signalAll()
-            }
         } finally {
             refreshLock.unlock()
+        }
+        // 续期网络请求不持锁：其它 401 只会在上面的有界等待里排队，不会被长时间阻塞
+        try {
+            return refreshAccessToken() ?: AuthManager.token
+        } finally {
+            refreshLock.lock()
+            try {
+                refreshInFlight.set(false)
+                refreshDone.signalAll()
+            } finally {
+                refreshLock.unlock()
+            }
         }
     }
 
@@ -265,11 +301,15 @@ object ApiClient {
                 val result = gson.fromJson<ApiResponse<LoginResult>>(body, type)
                 val newToken = result?.data?.accessToken
                 if (newToken.isNullOrEmpty()) return null
-                AuthManager.token = newToken
+                // 先落 refreshToken 再落 token：两处都是同步 commit，即便进程恰好在这两行之间被杀，
+                // 磁盘上也只会是「旧 token + 新 refreshToken」，下次续期仍能成功；反序则可能丢新 refreshToken
                 result.data.refreshToken?.let { AuthManager.refreshToken = it }
+                AuthManager.token = newToken
                 result.data.user?.let { AuthManager.user = it }
                 // 过期时间随令牌一起更新；解析不出就置空，退回被动 401 续期
                 AuthManager.expiresAt = result.data.expiresAtMillis()
+                // 只打标记，不带任何令牌值：判定续期成功不用再靠「临期窗口 + 零失败」推断
+                Log.d(TAG, "refresh ok")
                 newToken
             }
         } catch (e: Exception) {
@@ -304,8 +344,6 @@ object ApiClient {
             .addInterceptor { chain ->
                 val request = chain.request()
                 var response = chain.proceed(request)
-                // 只重试幂等请求：发评论/登录/投币等 POST 若被重放会产生重复副作用
-                if (request.method != "GET" && request.method != "HEAD") return@addInterceptor response
                 var attempt = 0
                 while (response.code in RETRYABLE_HTTP_CODES && attempt < MAX_SERVER_RETRY) {
                     attempt++
@@ -495,5 +533,64 @@ object ApiClient {
         if (path.startsWith("http")) return path
         return if (path.startsWith("/")) BASE_URL + path
         else "$BASE_URL/$path"
+    }
+
+    /**
+     * 排行榜数据。
+     *
+     * 默认走主站 `/api/v1/videos/ranking`（与主站 https://lingxi.xiguastudio.top/ranking 页同源）；
+     * 选了直连节点时先请求节点域名（节点反向代理站点 API，需 handoff 授权 + X-Forwarded-For），
+     * 节点未授权 / 超时 / 非 2xx / 解析失败一律回落主站 API，保证榜单可用。
+     */
+    suspend fun ranking(range: String, sort: String, limit: Int = 40): ApiResponse<PageData<Video>> {
+        if (PlaybackHelper.usingDirectNode()) {
+            val viaNode = fetchRankingFromNode(range, sort, limit)
+            if (viaNode != null) return viaNode
+            Log.w(TAG, "ranking via node failed, fallback to main api")
+        }
+        return apiService.getRanking(range, sort, limit)
+    }
+
+    private suspend fun fetchRankingFromNode(
+        range: String,
+        sort: String,
+        limit: Int
+    ): ApiResponse<PageData<Video>>? {
+        // 节点授权失败就不要拿无授权地址去请求，直接回落主站
+        if (!PlaybackHelper.ensureNodeGranted()) return null
+        val base = AuthManager.nodeUrl?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
+        val url = "$base/api/v1/videos/ranking?range=$range&sort=$sort&limit=$limit"
+        val started = SystemClock.elapsedRealtime()
+        // UI 侧硬上限：节点域名解析/建连不可中断时，callTimeout 不足以让界面按时回落主站
+        val result = withTimeoutOrNull(NODE_UI_TIMEOUT_MS) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val builder = Request.Builder().url(url).get()
+                    AuthManager.nodeGrantedIp?.takeIf { it.isNotEmpty() }?.let {
+                        builder.header("X-Forwarded-For", it)
+                    }
+                    okHttpClient.newCall(builder.build()).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Log.w(TAG, "ranking node HTTP ${response.code}")
+                            return@withContext null
+                        }
+                        val body = response.body?.string() ?: return@withContext null
+                        val type = object : TypeToken<ApiResponse<PageData<Video>>>() {}.type
+                        gson.fromJson<ApiResponse<PageData<Video>>>(body, type)
+                            ?.takeIf { it.code == 0 }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "ranking node error: ${e.message}")
+                    null
+                }
+            }
+        }
+        val elapsed = SystemClock.elapsedRealtime() - started
+        if (result == null) {
+            Log.w(TAG, "ranking node no result elapsed=${elapsed}ms (ui-cap=${NODE_UI_TIMEOUT_MS}ms)")
+        } else {
+            Log.i(TAG, "ranking node ok elapsed=${elapsed}ms")
+        }
+        return result
     }
 }

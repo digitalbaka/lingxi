@@ -328,6 +328,7 @@ class PlayerActivity : AppCompatActivity() {
     /** 读一次设置并应用到控制条按钮；改档后回到播放页即生效，无需重启 */
     private fun applyControlButtonSize() {
         ButtonSizeSettings.applyTouchTarget(binding.btnBack)
+        ButtonSizeSettings.applyLabelButton(binding.btnCache)
         ButtonSizeSettings.applyLabelButton(binding.btnQualityFs)
         ButtonSizeSettings.applyLabelButton(binding.btnFullscreen)
     }
@@ -1618,7 +1619,10 @@ class PlayerActivity : AppCompatActivity() {
             kind = OfflineCacheManager.KIND_VIDEO,
             url = playUrl,
             cover = v.getFullCoverUrl(ApiClient.BASE_URL),
-            headers = playHeaders
+            headers = playHeaders,
+            author = v.up?.let { it.nickname.ifBlank { it.username } } ?: "",
+            authorAvatar = v.up?.getFullAvatarUrl(ApiClient.BASE_URL) ?: "",
+            durationSec = v.duration
         )
         if (!started) refreshCacheButton()
     }

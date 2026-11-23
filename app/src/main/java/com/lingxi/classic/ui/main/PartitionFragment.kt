@@ -6,17 +6,20 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.lingxi.classic.R
 import com.lingxi.classic.data.api.ApiClient
 import com.lingxi.classic.data.model.Partition
 import com.lingxi.classic.databinding.FragmentPartitionBinding
 import com.lingxi.classic.ui.common.LoadMoreListener
 import com.lingxi.classic.ui.common.Navigator
+import com.lingxi.classic.ui.common.RankingAdapter
 import com.lingxi.classic.ui.common.VideoAdapter
 import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.toast
@@ -34,6 +37,7 @@ class PartitionFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var adapter: VideoAdapter
+    private lateinit var rankingAdapter: RankingAdapter
     private lateinit var gridLayoutManager: GridLayoutManager
     private lateinit var loadMoreListener: LoadMoreListener
 
@@ -46,6 +50,17 @@ class PartitionFragment : Fragment() {
     private var hasMore = true
     private var loading = false
 
+    /** 排行榜筛选：与主站 /ranking 页一致（day/week/month/all × views/likes/coins/danmaku/favs） */
+    private val rankRanges = listOf(
+        "day" to "日榜", "week" to "周榜", "month" to "月榜", "all" to "总榜"
+    )
+    private val rankMetrics = listOf(
+        "views" to "播放量", "likes" to "点赞数", "coins" to "小鱼干",
+        "danmaku" to "弹幕数", "favs" to "收藏数"
+    )
+    private var rankRange = "day"
+    private var rankSort = "views"
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentPartitionBinding.inflate(inflater, container, false)
         return binding.root
@@ -53,9 +68,11 @@ class PartitionFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         adapter = VideoAdapter(onClick = { Navigator.openVideo(requireContext(), it) })
+        rankingAdapter = RankingAdapter(onClick = { Navigator.openVideo(requireContext(), it) })
         gridLayoutManager = GridLayoutManager(requireContext(), requireContext().gridSpanCount())
         binding.rvVideos.layoutManager = gridLayoutManager
         binding.rvVideos.adapter = adapter
+        buildRankChips()
 
         loadMoreListener = LoadMoreListener { loadNext() }
         binding.rvVideos.addOnScrollListener(loadMoreListener)
@@ -160,9 +177,63 @@ class PartitionFragment : Fragment() {
         if (index == selected) return
         selected = index
         styleChips()
-        // 排行不支持排序
-        binding.btnSort.visible = index != 1
+        val ranking = index == 1
+        // 排行不支持排序，改用榜单筛选
+        binding.btnSort.visible = !ranking
+        binding.llRankFilters.visible = ranking
+        if (ranking) {
+            binding.rvVideos.layoutManager = LinearLayoutManager(requireContext())
+            binding.rvVideos.adapter = rankingAdapter
+        } else {
+            binding.rvVideos.layoutManager = gridLayoutManager
+            binding.rvVideos.adapter = adapter
+        }
         reload()
+    }
+
+    // ==================== 排行榜筛选 ====================
+
+    private fun buildRankChips() {
+        fillChips(binding.llRanges, rankRanges, rankRange) { key ->
+            rankRange = key
+            buildRankChips()
+            reload()
+        }
+        fillChips(binding.llMetrics, rankMetrics, rankSort) { key ->
+            rankSort = key
+            rankingAdapter.setMetric(key, rankMetrics.first { it.first == key }.second)
+            buildRankChips()
+            reload()
+        }
+    }
+
+    /** 一行可横向滚动的筛选 chip；选中用主题绿胶囊，未选中透明 */
+    private fun fillChips(
+        container: LinearLayout,
+        data: List<Pair<String, String>>,
+        selectedKey: String,
+        onPick: (String) -> Unit
+    ) {
+        container.removeAllViews()
+        val padH = (12 * resources.displayMetrics.density).toInt()
+        val padV = (5 * resources.displayMetrics.density).toInt()
+        for ((key, label) in data) {
+            val isSelected = key == selectedKey
+            val tv = TextView(requireContext()).apply {
+                text = label
+                textSize = 13f
+                setPadding(padH, padV, padH, padV)
+                if (isSelected) {
+                    setBackgroundResource(R.drawable.bg_tag)
+                    setTextColor(ContextCompat.getColor(requireContext(), R.color.lx_green_dark))
+                } else {
+                    setBackgroundColor(Color.TRANSPARENT)
+                    setTextColor(ContextCompat.getColor(requireContext(), R.color.lx_text_sub))
+                }
+                setOnClickListener { if (!isSelected) onPick(key) }
+            }
+            container.addView(tv)
+        }
     }
 
     // ==================== 视频列表 ====================
@@ -186,10 +257,10 @@ class PartitionFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 if (selected == 1) {
-                    // 排行榜：一次拉全量，不分页
-                    val d = ApiClient.apiService.getRanking().unwrap(context)
+                    // 排行榜：按筛选条件拉全量（默认主站，选节点走节点域名，失败回落主站）
+                    val d = ApiClient.ranking(rankRange, rankSort).unwrap(context)
                     if (d != null) {
-                        adapter.submit(d.items)
+                        rankingAdapter.submit(d.items)
                         hasMore = false
                         updateEmpty()
                     } else if (page == 1) {
@@ -221,7 +292,7 @@ class PartitionFragment : Fragment() {
     }
 
     private fun updateEmpty() {
-        if (adapter.itemCount == 0 && page == 1) {
+        if (currentItemCount() == 0 && page == 1) {
             binding.tvEmpty.text = "暂无内容"
             binding.tvEmpty.visible = true
         } else {
@@ -230,11 +301,14 @@ class PartitionFragment : Fragment() {
     }
 
     private fun showError() {
-        if (adapter.itemCount == 0) {
+        if (currentItemCount() == 0) {
             binding.tvEmpty.text = "加载失败，点击重试"
             binding.tvEmpty.visible = true
         }
     }
+
+    /** 当前挂载的适配器条目数（排行用 RankingAdapter，其余用 VideoAdapter） */
+    private fun currentItemCount(): Int = binding.rvVideos.adapter?.itemCount ?: 0
 
     companion object {
         fun newInstance() = PartitionFragment()

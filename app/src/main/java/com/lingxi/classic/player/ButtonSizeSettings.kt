@@ -2,6 +2,7 @@ package com.lingxi.classic.player
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.view.Gravity
 import android.widget.TextView
 import com.lingxi.classic.LingXiApp
 import kotlin.math.roundToInt
@@ -66,6 +67,9 @@ object ButtonSizeSettings {
         val min = (minTouchDp(l) * density).roundToInt()
         view.minWidth = min
         view.minHeight = min
+        // wrap_content 被 minWidth/minHeight 撑大后，TextView 默认 top|start 会让文字缩在左上角，
+        // 这里统一改为居中，三档尺寸下文字都居中（不涉及宽高本身）
+        view.gravity = Gravity.CENTER
         view.setPadding(
             (horizontalPaddingDp(l) * density).roundToInt(),
             (verticalPaddingDp(l) * density).roundToInt(),

@@ -1,7 +1,10 @@
 package com.lingxi.classic.ui.space
 
 import android.app.AlertDialog
+import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
@@ -10,20 +13,24 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lingxi.classic.data.api.ApiClient
+import com.lingxi.classic.data.auth.AuthManager
 import com.lingxi.classic.data.model.Dynamic
 import com.lingxi.classic.data.model.UserInfo
 import com.lingxi.classic.data.model.displayName
 import com.lingxi.classic.databinding.ActivitySpaceBinding
 import com.lingxi.classic.databinding.ItemDynamicSimpleBinding
 import com.lingxi.classic.databinding.ItemUserSimpleBinding
+import com.lingxi.classic.ui.auth.LoginActivity
 import com.lingxi.classic.ui.common.LoadMoreListener
 import com.lingxi.classic.ui.common.Navigator
 import com.lingxi.classic.ui.common.VideoAdapter
+import com.lingxi.classic.ui.message.ChatActivity
 import com.lingxi.classic.util.FormatUtils
 import com.lingxi.classic.util.gridSpanCount
 import com.lingxi.classic.util.ImageLoader
 import com.lingxi.classic.util.toast
 import com.lingxi.classic.util.visible
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** 用户空间：资料卡 + 视频/文章/动态 Tab */
@@ -33,6 +40,7 @@ class UserSpaceActivity : AppCompatActivity() {
 
     private var uid: Long = 0
     private var isFollowing = false
+    private var currentUserName = ""
 
     private var currentTab = TAB_VIDEO
     private var page = 1
@@ -46,6 +54,7 @@ class UserSpaceActivity : AppCompatActivity() {
     private lateinit var loadMoreListener: LoadMoreListener
 
     companion object {
+        private const val TAG = "LingXiSpace"
         private const val TAB_VIDEO = 0
         private const val TAB_ARTICLE = 1
         private const val TAB_DYNAMIC = 2
@@ -72,6 +81,7 @@ class UserSpaceActivity : AppCompatActivity() {
         binding.tabDynamic.setOnClickListener { switchTab(TAB_DYNAMIC) }
 
         binding.btnFollow.setOnClickListener { toggleFollow() }
+        binding.btnMessage.setOnClickListener { openChat() }
         binding.btnFollowing.setOnClickListener { showUserListDialog(following = true) }
         binding.btnFollowers.setOnClickListener { showUserListDialog(following = false) }
 
@@ -81,17 +91,28 @@ class UserSpaceActivity : AppCompatActivity() {
 
     // ==================== 空间资料 ====================
 
+    /** 占位是否还停在「加载中」：finally 里据此兜底收尾 */
+    private var spaceInfoLoading = false
+
     private fun loadSpaceInfo() {
+        showSpaceLoading()
         lifecycleScope.launch {
+            val start = SystemClock.elapsedRealtime()
             try {
                 val resp = ApiClient.apiService.getUserSpace(uid)
+                Log.i(TAG, "space_info ok elapsed=${SystemClock.elapsedRealtime() - start}ms")
                 val info = resp.data
                 if (!resp.isSuccess || info == null) {
                     toast(resp.message.ifBlank { "加载失败" })
+                    showSpaceError()
                     return@launch
                 }
+                binding.tvJoined.setOnClickListener(null)
+                binding.ivAvatar.alpha = 1f
+                spaceInfoLoading = false
                 val user = info.user
-                binding.tvNickname.text = user?.nickname?.ifBlank { user.username } ?: "用户 $uid"
+                currentUserName = user?.nickname?.ifBlank { user.username } ?: "用户 $uid"
+                binding.tvNickname.text = currentUserName
                 binding.tvLevel.text = "LV ${info.level?.level ?: user?.level ?: 0}"
                 binding.tvJoined.text = if (info.joinedAt.isNotEmpty()) "加入时间：${FormatUtils.formatDateString(info.joinedAt)}" else ""
                 ImageLoader.load(binding.ivAvatar, user?.getFullAvatarUrl(ApiClient.BASE_URL), circle = true)
@@ -102,16 +123,67 @@ class UserSpaceActivity : AppCompatActivity() {
                 binding.tvVideoCount.text = info.videoCount.toString()
 
                 binding.btnFollow.visible = !info.isSelf
+                binding.btnMessage.visible = !info.isSelf
                 isFollowing = info.isFollowing
                 updateFollowBtn()
+            } catch (e: CancellationException) {
+                // 页面销毁/切页导致的取消不是加载失败：重新抛出，不弹「Job was cancelled」
+                throw e
             } catch (e: Exception) {
+                Log.w(TAG, "space_info fail elapsed=${SystemClock.elapsedRealtime() - start}ms ${e.javaClass.simpleName}: ${e.message}")
                 toast("加载失败：${e.message}")
+                showSpaceError()
+            } finally {
+                // 取消/异常出口兜底：占位一定收尾，不残留「加载中…」
+                if (spaceInfoLoading) showSpaceError()
             }
         }
     }
 
+    /** 资料卡加载态：用现有控件填占位文案，避免首屏十几秒空白 */
+    private fun showSpaceLoading() {
+        spaceInfoLoading = true
+        binding.tvNickname.text = "加载中…"
+        binding.tvLevel.text = ""
+        binding.tvJoined.text = "正在加载用户资料"
+        binding.tvJoined.setOnClickListener(null)
+        binding.tvFollowingCount.text = "—"
+        binding.tvFollowerCount.text = "—"
+        binding.tvLikeCount.text = "—"
+        binding.tvVideoCount.text = "—"
+        binding.btnFollow.visible = false
+        binding.btnMessage.visible = false
+        binding.ivAvatar.alpha = 0.35f
+    }
+
+    /** 加载失败态：点资料卡上的提示文字可重试（列表一起重拉） */
+    private fun showSpaceError() {
+        spaceInfoLoading = false
+        binding.tvNickname.text = "加载失败"
+        binding.tvJoined.text = "网络异常，点此重试"
+        binding.tvJoined.setOnClickListener {
+            loadSpaceInfo()
+            loadTabContent(append = false)
+        }
+        binding.ivAvatar.alpha = 0.35f
+    }
+
     private fun updateFollowBtn() {
         binding.btnFollow.text = if (isFollowing) "已关注" else "+ 关注"
+    }
+
+    /** 私信：直接进入与该用户的单聊页；未登录先去登录 */
+    private fun openChat() {
+        if (!AuthManager.isLoggedIn) {
+            toast("请先登录")
+            startActivity(Intent(this, LoginActivity::class.java))
+            return
+        }
+        startActivity(
+            Intent(this, ChatActivity::class.java)
+                .putExtra(ChatActivity.EXTRA_PEER_UID, uid)
+                .putExtra(ChatActivity.EXTRA_PEER_NAME, currentUserName)
+        )
     }
 
     private fun toggleFollow() {
@@ -126,6 +198,8 @@ class UserSpaceActivity : AppCompatActivity() {
                 } else {
                     toast(resp.message.ifBlank { "操作失败" })
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 toast("网络错误：${e.message}")
             } finally {
@@ -175,6 +249,9 @@ class UserSpaceActivity : AppCompatActivity() {
                     TAB_DYNAMIC -> loadDynamics(append)
                     else -> loadVideos(append)
                 }
+            } catch (e: CancellationException) {
+                // 切页/退出的取消不是加载失败：重新抛出，不弹「Job was cancelled」
+                throw e
             } catch (e: Exception) {
                 toast("加载失败：${e.message}")
             } finally {
@@ -186,10 +263,18 @@ class UserSpaceActivity : AppCompatActivity() {
 
     private suspend fun loadVideos(append: Boolean) {
         // 文章走通用列表接口（/users/{id}/videos 只返回视频，不含文章）
-        val resp = if (currentTab == TAB_ARTICLE)
-            ApiClient.apiService.getVideos(page = page, kind = "article", uid = uid)
-        else
-            ApiClient.apiService.getUserVideos(uid, page = page)
+        val name = if (currentTab == TAB_ARTICLE) "articles" else "user_videos"
+        val start = SystemClock.elapsedRealtime()
+        val resp = try {
+            if (currentTab == TAB_ARTICLE)
+                ApiClient.apiService.getVideos(page = page, kind = "article", uid = uid)
+            else
+                ApiClient.apiService.getUserVideos(uid, page = page)
+        } catch (e: Exception) {
+            Log.w(TAG, "space $name fail page=$page elapsed=${SystemClock.elapsedRealtime() - start}ms ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+        Log.i(TAG, "space $name ok page=$page elapsed=${SystemClock.elapsedRealtime() - start}ms")
         val data = resp.data
         if (!resp.isSuccess || data == null) { toast(resp.message.ifBlank { "加载失败" }); return }
         val adapter = if (currentTab == TAB_ARTICLE) articleAdapter else videoAdapter
@@ -200,7 +285,14 @@ class UserSpaceActivity : AppCompatActivity() {
     }
 
     private suspend fun loadDynamics(append: Boolean) {
-        val resp = ApiClient.apiService.getUserDynamics(uid, page = page)
+        val start = SystemClock.elapsedRealtime()
+        val resp = try {
+            ApiClient.apiService.getUserDynamics(uid, page = page)
+        } catch (e: Exception) {
+            Log.w(TAG, "space dynamics fail page=$page elapsed=${SystemClock.elapsedRealtime() - start}ms ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+        Log.i(TAG, "space dynamics ok page=$page elapsed=${SystemClock.elapsedRealtime() - start}ms")
         val data = resp.data
         if (!resp.isSuccess || data == null) { toast(resp.message.ifBlank { "加载失败" }); return }
         if (append) dynamicAdapter.append(data.items) else dynamicAdapter.submit(data.items)
@@ -241,6 +333,8 @@ class UserSpaceActivity : AppCompatActivity() {
                         dlgHasMore = data.hasMore
                         if (dlgHasMore) dlgPage++
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {} finally {
                     dlgLoadMore.loading = false
                 }
@@ -260,6 +354,8 @@ class UserSpaceActivity : AppCompatActivity() {
                 } else {
                     toast(resp.message.ifBlank { "加载失败" })
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 toast("加载失败：${e.message}")
             } finally {

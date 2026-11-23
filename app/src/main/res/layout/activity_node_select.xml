@@ -4,16 +4,32 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <TextView
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_card"
-        android:gravity="center"
-        android:paddingVertical="13dp"
-        android:text="节点选择"
-        android:textColor="@color/lx_text"
-        android:textSize="17sp"
-        android:textStyle="bold" />
+        android:background="@drawable/bg_card">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingVertical="13dp"
+            android:text="节点选择"
+            android:textColor="@color/lx_text"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnRefresh"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:gravity="center"
+            android:paddingHorizontal="16dp"
+            android:text="刷新"
+            android:textColor="@color/accent"
+            android:textSize="14sp" />
+    </FrameLayout>
 
     <View
         android:layout_width="match_parent"
