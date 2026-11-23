@@ -77,6 +77,20 @@
                 android:textColor="@color/white"
                 android:textSize="13sp"
                 android:visibility="gone" />
+
+            <!-- 私信入口：与关注并排，自己看自己的空间时不显示 -->
+            <TextView
+                android:id="@+id/btnMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_tag"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:text="私信"
+                android:textColor="@color/lx_green_dark"
+                android:textSize="13sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout

@@ -32,12 +32,19 @@ object AuthManager {
 
     var token: String?
         get() = prefs.getString(KEY_TOKEN, null)
-        set(value) = prefs.edit().putString(KEY_TOKEN, value).apply()
+        // 同步落盘：续期成功后必须立刻写进磁盘，避免进程随后被系统回收时
+        // apply() 的异步写还没刷盘，重启后残留旧令牌/旧 refreshToken 导致续期 401
+        set(value) {
+            prefs.edit().putString(KEY_TOKEN, value).commit()
+        }
 
     /** accessToken 有效期仅 2 小时，过期后由 ApiClient 用 refreshToken 自动续期 */
     var refreshToken: String?
         get() = prefs.getString(KEY_REFRESH_TOKEN, null)
-        set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
+        // 同 token：轮换令牌必须同步落盘，否则丢写后旧令牌已被服务端作废，只能重新登录
+        set(value) {
+            prefs.edit().putString(KEY_REFRESH_TOKEN, value).commit()
+        }
 
     /**
      * 可信设备令牌：下次登录时回传给 /auth/login，让「邮箱二次验证」这条存量路径跳过验证。
@@ -87,7 +94,9 @@ object AuthManager {
             var id = prefs.getString(KEY_DEVICE_ID, null)
             if (id.isNullOrEmpty()) {
                 id = java.util.UUID.randomUUID().toString()
-                prefs.edit().putString(KEY_DEVICE_ID, id).apply()
+                // 生成逻辑不变，只把异步写改成同步：低内存设备首次登录后立刻被回收时，
+                // apply() 可能丢写，下次启动会换新 UUID，续期一旦做设备绑定就会被判 401
+                prefs.edit().putString(KEY_DEVICE_ID, id).commit()
             }
             return id
         }
@@ -135,5 +144,6 @@ object AuthManager {
         expiresAt = expiresAtMs
     }
 
-    fun logout() = prefs.edit().clear().apply()
+    /** 清空与写入同口径：同步落盘，退出登录后立刻被杀也不会把旧令牌留在磁盘上 */
+    fun logout() = prefs.edit().clear().commit()
 }

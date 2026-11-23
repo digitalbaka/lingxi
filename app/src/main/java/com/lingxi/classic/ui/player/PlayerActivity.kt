@@ -1526,7 +1526,10 @@ class PlayerActivity : AppCompatActivity() {
             kind = OfflineCacheManager.KIND_VIDEO,
             url = playUrl,
             cover = v.getFullCoverUrl(ApiClient.BASE_URL),
-            headers = playHeaders
+            headers = playHeaders,
+            author = v.up?.let { it.nickname.ifBlank { it.username } } ?: "",
+            authorAvatar = v.up?.getFullAvatarUrl(ApiClient.BASE_URL) ?: "",
+            durationSec = v.duration
         )
         if (!started) refreshCacheButton()
     }

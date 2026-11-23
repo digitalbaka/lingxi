@@ -63,6 +63,8 @@ class ArticleActivity : AppCompatActivity() {
     private var following = false
     /** 只播本地：入口参数 Navigator.EXTRA_LOCAL_ONLY，命中缓存后不发起任何网络请求 */
     private var localOnly = false
+    /** 只播本地时实际命中的缓存类型：音频条目为 audio，视频条目回退读 video 文件（只出声） */
+    private var localKind = OfflineCacheManager.KIND_AUDIO
 
     private var commentsController: CommentsController? = null
     private var interactionBar: InteractionBar? = null
@@ -238,14 +240,18 @@ class ArticleActivity : AppCompatActivity() {
      * 索引里没有这条（文件被删）就退出，不回退到网络播放。
      */
     private fun loadLocalAudio() {
+        // 先找独立的音频缓存；没有就回退到同 id 的视频缓存文件（ExoPlayer 只解码音轨）
         val entry = OfflineCacheManager.find(
             this, OfflineCacheManager.keyOf(videoId, OfflineCacheManager.KIND_AUDIO)
+        ) ?: OfflineCacheManager.find(
+            this, OfflineCacheManager.keyOf(videoId, OfflineCacheManager.KIND_VIDEO)
         )
         if (entry == null) {
             toast("本地缓存不存在，可能已被删除")
             finish()
             return
         }
+        localKind = entry.kind
         val v = Video(
             id = entry.videoId,
             title = entry.title,
@@ -385,9 +391,9 @@ class ArticleActivity : AppCompatActivity() {
 
     private fun refreshCacheButton() {
         val v = video ?: return
-        val key = OfflineCacheManager.keyOf(v.id, OfflineCacheManager.KIND_AUDIO)
+        val key = OfflineCacheManager.keyOf(v.id, localKind)
         binding.btnCache.text = when {
-            OfflineCacheManager.localFile(this, v.id, OfflineCacheManager.KIND_AUDIO) != null -> "已缓存"
+            OfflineCacheManager.localFile(this, v.id, localKind) != null -> "已缓存"
             OfflineCacheManager.isRunning(key) -> "${OfflineCacheManager.progressOf(key)}%"
             else -> "缓存"
         }
@@ -426,7 +432,10 @@ class ArticleActivity : AppCompatActivity() {
             kind = OfflineCacheManager.KIND_AUDIO,
             url = audioUrl,
             cover = v.getFullCoverUrl(com.lingxi.classic.data.api.ApiClient.BASE_URL),
-            headers = audioHeaders
+            headers = audioHeaders,
+            author = v.up?.let { it.nickname.ifBlank { it.username } } ?: "",
+            authorAvatar = v.up?.getFullAvatarUrl(com.lingxi.classic.data.api.ApiClient.BASE_URL) ?: "",
+            durationSec = v.duration
         )
         if (!started) refreshCacheButton()
     }
@@ -522,7 +531,7 @@ class ArticleActivity : AppCompatActivity() {
             var p: ExoPlayer? = null
             try {
                 // 先看本地是否有整文件缓存：命中就直接读文件，连建源（节点授权/拉流）都不发起
-                val local = OfflineCacheManager.localFile(this@ArticleActivity, v.id, OfflineCacheManager.KIND_AUDIO)
+                val local = OfflineCacheManager.localFile(this@ArticleActivity, v.id, localKind)
                 val url: String
                 var headers: Map<String, String> = emptyMap()
                 if (local != null) {

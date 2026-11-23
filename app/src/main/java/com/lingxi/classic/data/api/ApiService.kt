@@ -45,7 +45,11 @@ interface ApiService {
     suspend fun getPinned(@Query("limit") limit: Int = 12): ApiResponse<ItemList<Video>>
 
     @GET("/api/v1/videos/ranking")
-    suspend fun getRanking(): ApiResponse<PageData<Video>>
+    suspend fun getRanking(
+        @Query("range") range: String? = null,
+        @Query("sort") sort: String? = null,
+        @Query("limit") limit: Int = 40
+    ): ApiResponse<PageData<Video>>
 
     @GET("/api/v1/videos/{id}")
     suspend fun getVideoDetail(@Path("id") id: Long): ApiResponse<VideoDetail>
